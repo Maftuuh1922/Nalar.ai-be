@@ -1,0 +1,37 @@
+[project]
+name = "nalar-ai-backend"
+version = "0.1.0"
+description = "Backend FastAPI untuk Nalar AI — tutor belajar berbasis dokumen"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "sqlalchemy>=2.0",
+    "psycopg[binary]>=3.2",
+    "alembic>=1.14",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.6",
+    "python-jose[cryptography]>=3.3",
+    "bcrypt>=4.0",
+    "email-validator>=2.2",
+    "python-multipart>=0.0.17",
+    "llama-index-core>=0.12",
+    "llama-index-vector-stores-chroma>=0.4",
+    "llama-index-readers-file>=0.4",
+    "llama-index-llms-openai>=0.4",
+    "llama-index-embeddings-openai>=0.4",
+    "chromadb>=0.6",
+    "cryptography>=44",
+    "aiofiles>=24",
+    "knowledge-storm>=1.1.1",
+    "duckduckgo-search>=8.1.1",
+    "python-docx>=1.2.0",
+    "tokenizers>=0.21.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]

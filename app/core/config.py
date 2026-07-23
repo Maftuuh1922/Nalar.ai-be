@@ -21,7 +21,11 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
 
     # CORS — daftar origin frontend yang diizinkan, dipisah koma
-    CORS_ORIGINS: str = "http://localhost:3000"
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001"
+
+    # Direktori penyimpanan file upload dan ChromaDB (relatif terhadap working directory)
+    UPLOAD_DIR: str = "uploads"
+    CHROMA_DIR: str = "chroma_db"
 
     @property
     def cors_origins_list(self) -> list[str]:

@@ -9,10 +9,17 @@ from app.core.config import settings
 from app.db.base import Base
 
 # Import semua model supaya terdaftar di Base.metadata (dibutuhkan autogenerate)
-from app.models import user  # noqa: F401
+from app.models import user, model_config, document, chat_history  # noqa: F401
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+
+# `postgresql+psycopg://` sudah valid untuk SQLAlchemy sync dengan psycopg3.
+# Driver psycopg3 (paket `psycopg`) mendukung mode sync maupun async pada URL
+# yang sama. Pastikan DATABASE_URL di .env TIDAK menggunakan suffix `+asyncio`
+# (mis. `postgresql+psycopg+asyncio://`) karena itu hanya untuk async engine.
+# Jika ada suffix async, strip dulu sebelum diserahkan ke Alembic.
+_sync_url = settings.DATABASE_URL.replace("+asyncio", "")
+config.set_main_option("sqlalchemy.url", _sync_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

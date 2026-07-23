@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.env
+nalar.db
+chroma_db/
+uploads/
+.venv/
