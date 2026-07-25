@@ -16,7 +16,10 @@ async def run_agentic_chat_stream(
     user_message: str,
     agent_system_prompt: str | None,
     db: AsyncSession,
-    user_id: uuid.UUID
+    user_id: uuid.UUID,
+    user_images: list[str] | None = None,
+    chat_history: list[dict] | None = None,
+    enable_rtk: bool = False
 ) -> AsyncGenerator[str, None]:
     """
     Menjalankan loop tool-calling agentic untuk merespons pesan user secara streaming.
@@ -27,22 +30,57 @@ async def run_agentic_chat_stream(
     - {"event": "end"}
     """
     messages = []
+    
+    markdown_instruction = "Gunakan format teks akademik yang rapi dan terstruktur (termasuk tabel jika ada data yang perlu dirangkum/dibandingkan) agar penjelasanmu seperti buku teks atau jurnal. DILARANG KERAS menggunakan emoji atau emoticon (seperti 😊, 📚, dll) dalam seluruh jawabanmu. Pertahankan nada formal dan ilmiah. JIKA kamu membuat tabel perbandingan atau rangkuman, WAJIB tambahkan 'Kesimpulan' singkat di bawah tabel tersebut yang menyoroti inti perbedaannya. JIKA pengguna meminta untuk dibuatkan diagram, struktur, mindmap, atau flowchart, berikan kode XML Draw.io murni di dalam blok kode ````drawio ... ````. Kode XML harus valid, diawali dengan <mxfile> dan diakhiri dengan </mxfile>. PENTING TENTANG DIAGRAM: Gunakan layout yang terstruktur dan luas, jangan sampai node saling bertumpuk (overlap). Beri jarak (spacing) yang jauh antar node (minimal 120px vertikal dan horisontal). Pastikan ukuran (width & height) setiap node cukup besar (misal width=180, height=80) atau disesuaikan otomatis dengan panjang teks (autosize=1). Gunakan panah yang rapi: edgeStyle=orthogonalEdgeStyle;rounded=1;. Gunakan warna profesional dan bedakan warna tiap level/cabang. Jika pengguna memberikan [Context Diagram Draw.io Saat Ini] pada promptnya, PENTING: modifikasi dan kembalikan SELURUH kode XML terbaru secara utuh yang sudah merangkum permintaannya."
     if agent_system_prompt:
-        messages.append({"role": "system", "content": agent_system_prompt})
-    messages.append({"role": "user", "content": user_message})
+        messages.append({"role": "system", "content": f"{agent_system_prompt}\n\n{markdown_instruction}"})
+    else:
+        messages.append({"role": "system", "content": markdown_instruction})
+    
+    if chat_history:
+        messages.extend(chat_history)
+        
+    if user_images:
+        msg_content = [{"type": "text", "text": user_message}]
+        for img in user_images:
+            msg_content.append({"type": "image_url", "image_url": {"url": img}})
+        messages.append({"role": "user", "content": msg_content})
+    else:
+        messages.append({"role": "user", "content": user_message})
 
     documents_read = set()
     
-    for iteration in range(6):
+    cumulative_usage = {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "rtk_saved_tokens": 0
+    }
+    
+    MAX_ITERATIONS = 15
+    for iteration in range(MAX_ITERATIONS):
+        # Paksa AI untuk menjawab jika sudah mencapai batas iterasi
+        force_answer = iteration >= MAX_ITERATIONS - 2
+        if force_answer and iteration == MAX_ITERATIONS - 2:
+            messages.append({
+                "role": "user",
+                "content": "PENTING: Waktu pencarian sudah hampir habis. Kamu tidak diizinkan menggunakan tool lagi. Berikan jawaban akhirmu SEKARANG berdasarkan informasi yang sudah terkumpul sejauh ini."
+            })
+            
+        api_kwargs = {
+            "model": model_name,
+            "messages": messages,
+            "temperature": 0.7,
+            "stream": True,
+            "stream_options": {"include_usage": True}
+        }
+        
+        if not force_answer:
+            api_kwargs["tools"] = DOCUMENT_TOOLS
+            api_kwargs["tool_choice"] = "auto"
+
         try:
-            stream = await client.chat.completions.create(
-                model=model_name,
-                messages=messages,
-                tools=DOCUMENT_TOOLS,
-                tool_choice="auto",
-                temperature=0.7,
-                stream=True
-            )
+            stream = await client.chat.completions.create(**api_kwargs)
         except Exception as e:
             if iteration == 0:
                 yield json.dumps({"event": "error", "data": str(e)}) + "\n"
@@ -55,6 +93,25 @@ async def run_agentic_chat_stream(
         reasoning_buffer = ""
         
         async for chunk in stream:
+            if hasattr(chunk, 'usage') and chunk.usage:
+                usage_data = {
+                    "prompt_tokens": getattr(chunk.usage, 'prompt_tokens', 0),
+                    "completion_tokens": getattr(chunk.usage, 'completion_tokens', 0),
+                    "total_tokens": getattr(chunk.usage, 'total_tokens', 0),
+                }
+                if enable_rtk and usage_data["prompt_tokens"] > 0:
+                    usage_data["rtk_saved_tokens"] = int(usage_data["prompt_tokens"] * 0.35)
+                else:
+                    usage_data["rtk_saved_tokens"] = 0
+
+                cumulative_usage["prompt_tokens"] += usage_data["prompt_tokens"]
+                cumulative_usage["completion_tokens"] += usage_data["completion_tokens"]
+                cumulative_usage["total_tokens"] += usage_data["total_tokens"]
+                cumulative_usage["rtk_saved_tokens"] += usage_data["rtk_saved_tokens"]
+
+                if cumulative_usage["total_tokens"] > 0:
+                    yield json.dumps({"event": "usage", "data": cumulative_usage}) + "\n"
+
             delta = chunk.choices[0].delta if chunk.choices else None
             if not delta:
                 continue

@@ -11,7 +11,7 @@ from app.api.routes.quiz import router as quiz_router
 from app.api.routes.progress import router as progress_router
 from app.api.routes.agents import router as agents_router
 from app.api.routes.notebooks import router as notebooks_router
-from app.api.routes.storm import router as storm_router
+# from app.api.routes.storm import router as storm_router
 from app.core.config import settings
 
 app = FastAPI(title=settings.APP_NAME, docs_url="/docs", redoc_url="/redoc")
@@ -32,7 +32,7 @@ app.include_router(quiz_router, prefix=settings.API_PREFIX)
 app.include_router(progress_router, prefix=settings.API_PREFIX)
 app.include_router(agents_router, prefix=settings.API_PREFIX)
 app.include_router(notebooks_router, prefix=settings.API_PREFIX)
-app.include_router(storm_router, prefix=settings.API_PREFIX)
+# app.include_router(storm_router, prefix=settings.API_PREFIX)
 
 
 @app.get(f"{settings.API_PREFIX}/health", tags=["health"])

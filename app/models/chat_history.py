@@ -25,6 +25,10 @@ class ChatHistory(Base):
     # "user" | "assistant"
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    # JSON array of image base64 strings or URLs attached to this message
+    images_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     # JSON string dari list sources, hanya ada di role="assistant"
     sources_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # JSON string dari usage token, hanya ada di role="assistant"
+    usage_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

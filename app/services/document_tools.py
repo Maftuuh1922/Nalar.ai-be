@@ -53,7 +53,15 @@ async def read_document(db: AsyncSession, user_id: uuid.UUID, document_id_or_fil
         try:
             reader = SimpleDirectoryReader(input_files=[doc.file_path])
             parsed_docs = reader.load_data()
-            extracted_text = "\n\n".join([pd.text for pd in parsed_docs if pd.text])
+            extracted_parts = []
+            for pd in parsed_docs:
+                if pd.text:
+                    page_label = pd.metadata.get("page_label") if pd.metadata else None
+                    if page_label:
+                        extracted_parts.append(f"[Halaman {page_label}]\n{pd.text}")
+                    else:
+                        extracted_parts.append(pd.text)
+            extracted_text = "\n\n".join(extracted_parts)
         except Exception as parse_err:
             return json.dumps({"error": f"ERROR: Dokumen ditemukan tapi gagal diparsing (format tidak didukung / file korup): {parse_err}"})
 
@@ -94,7 +102,15 @@ async def search_in_document(db: AsyncSession, user_id: uuid.UUID, document_id_o
         try:
             reader = SimpleDirectoryReader(input_files=[doc.file_path])
             parsed_docs = reader.load_data()
-            extracted_text = "\n\n".join([pd.text for pd in parsed_docs if pd.text])
+            extracted_parts = []
+            for pd in parsed_docs:
+                if pd.text:
+                    page_label = pd.metadata.get("page_label") if pd.metadata else None
+                    if page_label:
+                        extracted_parts.append(f"[Halaman {page_label}]\n{pd.text}")
+                    else:
+                        extracted_parts.append(pd.text)
+            extracted_text = "\n\n".join(extracted_parts)
         except Exception as parse_err:
             return json.dumps({"error": f"Gagal membaca dokumen untuk pencarian: {parse_err}"})
 
@@ -199,6 +215,28 @@ DOCUMENT_TOOLS = [
                     }
                 },
                 "required": ["document_id_or_filename", "query"],
+                "additionalProperties": False
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_web",
+            "description": "Mencari informasi, jurnal, atau berita di internet secara real-time. Gunakan ini jika informasi tidak ada di dokumen yang diunggah pengguna.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Kata kunci pencarian internet."
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Jumlah maksimal hasil yang dikembalikan (default 5)."
+                    }
+                },
+                "required": ["query"],
                 "additionalProperties": False
             }
         }

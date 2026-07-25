@@ -7,12 +7,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class ChatRequest(BaseModel):
-    message: str = Field(min_length=1, max_length=5000)
+    message: str = Field(min_length=1, max_length=500000)
     session_id: uuid.UUID | None = None
     document_ids: list[uuid.UUID] | None = None
     agent_id: uuid.UUID | None = None
     enable_reasoning: bool = False
     enable_rtk: bool = False
+    images: list[str] | None = None
 
 
 class Source(BaseModel):
@@ -45,5 +46,7 @@ class ChatHistoryItem(BaseModel):
     session_id: uuid.UUID | None = None
     role: str
     content: str
+    images_json: str | None = None
     sources_json: str | None = None
+    usage_json: str | None = None
     created_at: datetime

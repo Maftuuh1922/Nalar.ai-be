@@ -21,6 +21,10 @@ from app.models.chat_session import ChatSession
 from app.schemas.chat import ChatHistoryItem, ChatRequest, ChatResponse, Source
 from app.schemas.chat_session import ChatSessionResponse, ChatSessionCreate
 from app.services.agentic_chat import run_agentic_chat_stream
+from pydantic import BaseModel
+
+class SuggestionRequest(BaseModel):
+    agent_id: str | None = None
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -71,12 +75,35 @@ async def chat(
         if not sess:
             raise HTTPException(status_code=404, detail="Sesi chat tidak ditemukan")
 
+    # Load history for the session (limit to last 20 messages to save context)
+    chat_history_list = []
+    if session_id:
+        from app.models.chat_history import ChatHistory
+        history_records = await db.scalars(
+            select(ChatHistory)
+            .where(ChatHistory.session_id == session_id)
+            .order_by(ChatHistory.created_at.asc())
+        )
+        for record in history_records.all()[-10:]:  # Keep last 10 messages for context
+            if getattr(record, 'images_json', None):
+                try:
+                    images = json.loads(record.images_json)
+                    content_parts = [{"type": "text", "text": record.content}]
+                    for img in images:
+                        content_parts.append({"type": "image_url", "image_url": {"url": img}})
+                    chat_history_list.append({"role": record.role, "content": content_parts})
+                except Exception:
+                    chat_history_list.append({"role": record.role, "content": record.content})
+            else:
+                chat_history_list.append({"role": record.role, "content": record.content})
+
     # Simpan pesan user ke history
     user_msg = ChatHistory(
         user_id=current_user.id,
         session_id=session_id,
         role="user",
         content=payload.message,
+        images_json=json.dumps(payload.images) if payload.images else None
     )
     db.add(user_msg)
     await db.flush()
@@ -110,25 +137,73 @@ async def chat(
         base_url=model_cfg.base_url,
     )
 
+    # Beri tahu AI dokumen apa saja yang spesifik dipilih user
+    if document_ids:
+        try:
+            docs_for_context = await db.scalars(
+                select(Document).where(Document.id.in_([uuid.UUID(d) for d in document_ids]))
+            )
+            doc_list_str = "\n".join([f"- ID: {d.id} | File: {d.filename}" for d in docs_for_context.all()])
+            doc_system_instruction = (
+                f"PENTING: User telah menunjuk dokumen berikut untuk sesi ini:\n{doc_list_str}\n"
+                f"Kamu WAJIB menggunakan tool 'read_document' atau 'search_in_document' pada dokumen di atas "
+                f"jika user meminta penjelasan atau bertanya tentang konteks yang ada di dalamnya!"
+            )
+            if agent_system_prompt:
+                agent_system_prompt += "\n\n" + doc_system_instruction
+            else:
+                agent_system_prompt = doc_system_instruction
+        except Exception as e:
+            import logging
+            logging.error(f"Error fetching docs for context: {e}")
+
     async def stream_generator() -> AsyncGenerator[str, None]:
         full_text = ""
+        final_usage = None
         try:
             async for chunk in run_agentic_chat_stream(
                 client=client,
                 model_name=model_cfg.model_name,
                 user_message=payload.message,
+                user_images=payload.images,
                 agent_system_prompt=agent_system_prompt,
                 db=db,
-                user_id=current_user.id
+                user_id=current_user.id,
+                chat_history=chat_history_list,
+                enable_rtk=payload.enable_rtk
             ):
                 # Try to parse the chunk to accumulate text
                 try:
                     event_obj = json.loads(chunk.strip())
                     if event_obj.get("event") == "text":
                         full_text += event_obj.get("data", "")
+                    elif event_obj.get("event") == "usage":
+                        final_usage = event_obj.get("data")
                 except:
                     pass
                 yield chunk
+                
+            # Generate suggestions inline
+            if full_text:
+                try:
+                    sugg_prompt = f"Berdasarkan jawaban ini:\n\n{full_text[:1500]}\n\nBerikan HANYA 3 saran pertanyaan singkat lanjutan dalam format JSON array string. Contoh: [\"Apa itu X?\", \"Bagaimana cara Y?\", \"Jelaskan Z\"]"
+                    sugg_response = await client.chat.completions.create(
+                        model=model_cfg.model_name,
+                        messages=[{"role": "user", "content": sugg_prompt}],
+                        temperature=0.7,
+                        max_tokens=150
+                    )
+                    sugg_content = sugg_response.choices[0].message.content.strip()
+                    if sugg_content.startswith("```json"):
+                        sugg_content = sugg_content.replace("```json", "").replace("```", "").strip()
+                    sugg_list = json.loads(sugg_content)
+                    if isinstance(sugg_list, list):
+                        yield json.dumps({"event": "suggestions", "data": sugg_list[:3]}) + "\n"
+                except Exception as e:
+                    import logging
+                    logging.error(f"Failed to generate inline suggestions: {e}")
+                    pass
+                    
         except Exception as exc:
             yield json.dumps({"event": "error", "data": f"Gagal menghubungi model AI: {exc}"}) + "\n"
         finally:
@@ -138,11 +213,67 @@ async def chat(
                 session_id=session_id,
                 role="assistant",
                 content=full_text,
+                usage_json=json.dumps(final_usage) if final_usage else None
             )
             db.add(ai_msg)
             await db.commit()
 
     return StreamingResponse(stream_generator(), media_type="application/x-ndjson")
+
+@router.post("/{session_id}/suggestions", response_model=list[str], status_code=status.HTTP_200_OK)
+async def get_chat_suggestions(
+    session_id: uuid.UUID,
+    payload: SuggestionRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Mendapatkan 3 saran pertanyaan berdasarkan percakapan terakhir."""
+    model_cfg = await db.scalar(
+        select(ModelConfig).where(
+            ModelConfig.user_id == current_user.id,
+            ModelConfig.is_active == True
+        )
+    )
+    if not model_cfg:
+        return []
+
+    # Get last assistant message
+    history_records = await db.scalars(
+        select(ChatHistory)
+        .where(ChatHistory.session_id == session_id)
+        .order_by(ChatHistory.created_at.desc())
+        .limit(2)
+    )
+    history = list(history_records.all())
+    if not history or history[0].role != "assistant":
+        return []
+
+    last_assistant_msg = history[0].content
+
+    api_key = decrypt_api_key(model_cfg.api_key_encrypted)
+    client = AsyncOpenAI(api_key=api_key or "dummy", base_url=model_cfg.base_url)
+
+    prompt = f"Berdasarkan jawaban terakhir asisten AI ini:\n\n{last_assistant_msg[:2000]}\n\nBuatlah tepat 3 saran pertanyaan lanjutan singkat (maksimal 10 kata per pertanyaan) yang relevan untuk ditanyakan oleh pengguna. Format output HANYA array JSON string tanpa markdown, contoh: [\"Apa maksud dari X?\", \"Bagaimana cara Y?\", \"Jelaskan Z\"]"
+
+    try:
+        response = await client.chat.completions.create(
+            model=model_cfg.model_name,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=150
+        )
+        content = response.choices[0].message.content.strip()
+        if content.startswith("```json"):
+            content = content.replace("```json", "").replace("```", "").strip()
+        suggestions = json.loads(content)
+        if isinstance(suggestions, list):
+            return suggestions[:3]
+        return []
+    except Exception as e:
+        import logging
+        logging.error(f"Error generating suggestions: {e}")
+        return []
+
 
 
 
