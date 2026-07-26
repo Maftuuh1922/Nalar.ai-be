@@ -15,14 +15,30 @@ from app.api.routes.agents import router as agents_router
 from app.api.routes.notebooks import router as notebooks_router
 # from app.api.routes.storm import router as storm_router
 from app.core.config import settings
-from app.db.session import engine
 from app.db.base import Base
+from sqlalchemy import select, func
+from app.db.session import engine, AsyncSessionLocal
+from app.models.user import User
+from app.core.security import hash_password
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Buat tabel otomatis jika menggunakan SQLite/lokal
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        
+    # Seed default admin user jika belum ada user sama sekali
+    async with AsyncSessionLocal() as session:
+        user_count = await session.scalar(select(func.count()).select_from(User))
+        if user_count == 0:
+            default_admin = User(
+                email="admin@nalar.ai",
+                hashed_password=hash_password("CHANGEME"),
+                full_name="Administrator",
+                is_admin=True,
+            )
+            session.add(default_admin)
+            await session.commit()
     yield
 
 app = FastAPI(title=settings.APP_NAME, docs_url="/docs", redoc_url="/redoc", lifespan=lifespan)
