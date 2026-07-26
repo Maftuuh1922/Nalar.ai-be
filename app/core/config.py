@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     API_PREFIX: str = "/api"
 
     # Database
-    DATABASE_URL: str = "postgresql+psycopg://nalar:nalar@localhost:5432/nalar_ai"
+    DATABASE_URL: str = "sqlite+aiosqlite:///nalar_ai.db"
 
     # Keamanan / JWT
     SECRET_KEY: str = "changeme-generate-a-random-secret"

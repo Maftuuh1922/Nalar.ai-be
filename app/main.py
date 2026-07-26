@@ -1,5 +1,7 @@
 """Entry point aplikasi FastAPI Nalar AI."""
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -13,8 +15,17 @@ from app.api.routes.agents import router as agents_router
 from app.api.routes.notebooks import router as notebooks_router
 # from app.api.routes.storm import router as storm_router
 from app.core.config import settings
+from app.db.session import engine
+from app.db.base import Base
 
-app = FastAPI(title=settings.APP_NAME, docs_url="/docs", redoc_url="/redoc")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Buat tabel otomatis jika menggunakan SQLite/lokal
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+
+app = FastAPI(title=settings.APP_NAME, docs_url="/docs", redoc_url="/redoc", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

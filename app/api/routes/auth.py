@@ -1,7 +1,7 @@
 """Endpoint autentikasi: registrasi, login, dan info user yang sedang login."""
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -23,10 +23,15 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
             detail="Email sudah terdaftar. Silakan login.",
         )
 
+    # Standar Omni Root: Cek apakah ini user pertama di database
+    user_count = await db.scalar(select(func.count()).select_from(User))
+    is_admin = user_count == 0
+
     user = User(
         email=payload.email,
         hashed_password=hash_password(payload.password),
         full_name=payload.full_name,
+        is_admin=is_admin,
     )
     db.add(user)
     await db.commit()
