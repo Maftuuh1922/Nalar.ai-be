@@ -87,7 +87,23 @@ _QUIZ_TEMPLATE = PromptTemplate(
     "{{\n"
     '  "question": "pertanyaan",\n'
     '  "options": ["opsi A", "opsi B", "opsi C", "opsi D"],\n'
-    '  "answer": "opsi yang benar secara lengkap",\n'
+    '  "answer": "salin PERSIS teks opsi yang benar, bukan hurufnya",\n'
+    '  "explanation": "penjelasan singkat mengapa jawaban tersebut benar"\n'
+    "}}\n\n"
+    "Jangan tambahkan teks apapun sebelum atau sesudah JSON array."
+)
+
+# Dipakai saat user berlatih tanpa memilih dokumen rujukan.
+_QUIZ_TOPIC_TEMPLATE = PromptTemplate(
+    "Instruksi: Buat {num_questions} soal latihan pilihan ganda (multiple choice) "
+    "tentang topik '{topic}' berdasarkan pengetahuan umum yang akurat.\n"
+    "Semua soal harus berbahasa Indonesia dan setiap soal wajib memiliki 4 opsi jawaban.\n"
+    "Kamu HARUS merespon HANYA dengan format JSON valid berisi array dari object.\n"
+    "Setiap object soal memiliki struktur persis seperti ini:\n"
+    "{{\n"
+    '  "question": "pertanyaan",\n'
+    '  "options": ["opsi A", "opsi B", "opsi C", "opsi D"],\n'
+    '  "answer": "salin PERSIS teks opsi yang benar, bukan hurufnya",\n'
     '  "explanation": "penjelasan singkat mengapa jawaban tersebut benar"\n'
     "}}\n\n"
     "Jangan tambahkan teks apapun sebelum atau sesudah JSON array."
@@ -113,6 +129,8 @@ def _index_document_sync(
     base_url: str,
     api_key: str,
     embedding_model: str,
+    chunk_size: int = 512,
+    chunk_overlap: int = 64,
 ) -> None:
     """Parsing, chunking, embedding, dan simpan ke ChromaDB (sync, dijalankan di thread)."""
     embed_model = OpenAIEmbedding(
@@ -128,7 +146,12 @@ def _index_document_sync(
         doc.metadata["doc_id"] = doc_id
         doc.metadata["user_id"] = user_id
 
-    splitter = SentenceSplitter(chunk_size=512, chunk_overlap=64)
+    # Ukuran potongan diambil dari Pengaturan > Pusat Pengetahuan. Overlap
+    # dijaga agar selalu lebih kecil dari chunk_size supaya splitter tidak error.
+    splitter = SentenceSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=min(chunk_overlap, max(chunk_size // 2, 0)),
+    )
     nodes = splitter.get_nodes_from_documents(documents)
 
     client = _get_chroma_client()
@@ -147,11 +170,14 @@ async def index_document(
     base_url: str,
     api_key: str,
     embedding_model: str,
+    chunk_size: int = 512,
+    chunk_overlap: int = 64,
 ) -> None:
     """Async wrapper untuk indexing (dijalankan di thread pool)."""
     await asyncio.to_thread(
         _index_document_sync,
         user_id, file_path, doc_id, base_url, api_key, embedding_model,
+        chunk_size, chunk_overlap,
     )
 
 
@@ -194,6 +220,7 @@ def _query_sync(
     agent_system_prompt: str | None = None,
     enable_reasoning: bool = False,
     enable_rtk: bool = False,
+    top_k: int = 5,
 ) -> dict:
     """Sync RAG query — dijalankan di thread pool."""
     llm = LlamaOpenAI(
@@ -233,7 +260,7 @@ def _query_sync(
 
     query_engine = index.as_query_engine(
         llm=llm,
-        similarity_top_k=5,
+        similarity_top_k=max(1, top_k),
         filters=filters,
         text_qa_template=qa_template,
         response_mode="compact",
@@ -283,11 +310,12 @@ async def query_documents(
     agent_system_prompt: str | None = None,
     enable_reasoning: bool = False,
     enable_rtk: bool = False,
+    top_k: int = 5,
 ) -> dict:
     """Async wrapper untuk RAG query."""
     return await asyncio.to_thread(
         _query_sync,
-        user_id, query, base_url, api_key, model_name, embedding_model, document_ids, agent_system_prompt, enable_reasoning, enable_rtk,
+        user_id, query, base_url, api_key, model_name, embedding_model, document_ids, agent_system_prompt, enable_reasoning, enable_rtk, top_k,
     )
 
 
@@ -302,29 +330,117 @@ def delete_document_vectors(user_id: str, doc_id: str) -> None:
         logger.exception("Gagal menghapus vektor untuk doc_id %s", doc_id)
 
 
-def _generate_quiz_sync(
+def _extract_json_array(raw: str) -> list | None:
+    """Tarik array JSON dari balasan LLM yang sering diselipi basa-basi.
+
+    Banyak model membungkus jawaban dengan ```json, menambah kalimat pembuka,
+    atau mengemasnya dalam object seperti {"questions": [...]}. Semua bentuk itu
+    ditangani di sini supaya kuis tidak gagal hanya karena format.
+    """
+    text = raw.strip()
+
+    # Buang pagar kode markdown di mana pun posisinya.
+    fence = re.search(r"```(?:json)?\s*(.+?)```", text, re.DOTALL)
+    if fence:
+        text = fence.group(1).strip()
+
+    candidates: list[str] = [text]
+
+    # Ambil potongan dari kurung pembuka pertama sampai penutup terakhir.
+    for opener, closer in (("[", "]"), ("{", "}")):
+        start, end = text.find(opener), text.rfind(closer)
+        if start != -1 and end > start:
+            candidates.append(text[start : end + 1])
+
+    for candidate in candidates:
+        try:
+            parsed = json.loads(candidate)
+        except Exception:
+            continue
+        if isinstance(parsed, list):
+            return parsed
+        if isinstance(parsed, dict):
+            for key in ("questions", "soal", "data", "items", "quiz"):
+                value = parsed.get(key)
+                if isinstance(value, list):
+                    return value
+            # Object tunggal berisi satu soal juga diterima.
+            if "question" in parsed:
+                return [parsed]
+    return None
+
+
+def _normalize_questions(raw_items: list, num_questions: int) -> list[dict]:
+    """Rapikan soal mentah dari LLM menjadi struktur yang dipakai frontend.
+
+    Yang paling sering bikin kuis "tidak jalan": model menulis kunci jawaban
+    sebagai huruf ("B") atau "B. teks", sedangkan frontend membandingkan kunci
+    dengan teks opsi persis. Di sini kunci selalu dipetakan balik ke teks opsi.
+    """
+    cleaned: list[dict] = []
+
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+
+        question = str(item.get("question") or item.get("pertanyaan") or "").strip()
+        raw_options = item.get("options") or item.get("opsi") or item.get("choices") or []
+        if isinstance(raw_options, dict):
+            # Bentuk {"A": "...", "B": "..."} — urutkan berdasarkan labelnya.
+            raw_options = [raw_options[k] for k in sorted(raw_options)]
+        options = [str(o).strip() for o in raw_options if str(o).strip()]
+        if not question or len(options) < 2:
+            continue
+
+        # Hilangkan awalan "A. " / "A) " agar tidak dobel dengan label di UI.
+        options = [re.sub(r"^\s*[A-Da-d][.)]\s+", "", o) for o in options]
+
+        answer = str(item.get("answer") or item.get("jawaban") or "").strip()
+        answer = re.sub(r"^\s*[A-Da-d][.)]\s*", "", answer).strip()
+
+        match = next((o for o in options if o.lower() == answer.lower()), None)
+        if match is None:
+            # Kunci berupa huruf saja, atau hanya sebagian teks opsi.
+            letter = str(item.get("answer") or "").strip().upper()
+            if len(letter) == 1 and "A" <= letter <= chr(ord("A") + len(options) - 1):
+                match = options[ord(letter) - ord("A")]
+            elif answer:
+                match = next((o for o in options if answer.lower() in o.lower()), None)
+        if match is None:
+            match = options[0]
+
+        cleaned.append({
+            "question": question,
+            "options": options,
+            "answer": match,
+            "explanation": str(item.get("explanation") or item.get("penjelasan") or "").strip()
+            or "Penjelasan tidak tersedia.",
+        })
+
+        if len(cleaned) >= num_questions:
+            break
+
+    return cleaned
+
+
+def _quiz_context_from_index(
     user_id: str,
     document_id: str,
     topic: str,
-    num_questions: int,
     base_url: str,
     api_key: str,
-    model_name: str,
     embedding_model: str,
-) -> list[dict]:
-    """Sync generate quiz — dijalankan di thread pool."""
-    llm = LlamaOpenAI(
-        model=model_name,
-        api_base=base_url,
-        api_key=api_key,
-        temperature=0.2, # sedikit kreativitas untuk membuat soal
-    )
-    embed_model = OpenAIEmbedding(
-        model_name=embedding_model,
-        api_base=base_url,
-        api_key=api_key,
+    top_k: int = 12,
+) -> str:
+    """Ambil potongan dokumen paling relevan sebagai bahan soal."""
+    from llama_index.core.vector_stores import (
+        FilterCondition,
+        FilterOperator,
+        MetadataFilter,
+        MetadataFilters,
     )
 
+    embed_model = OpenAIEmbedding(model_name=embedding_model, api_base=base_url, api_key=api_key)
     client = _get_chroma_client()
     collection = client.get_or_create_collection(_collection_name(user_id))
     vector_store = ChromaVectorStore(chroma_collection=collection)
@@ -333,65 +449,101 @@ def _generate_quiz_sync(
         vector_store, storage_context=storage_context, embed_model=embed_model
     )
 
-    from llama_index.core.vector_stores import MetadataFilter, MetadataFilters, FilterOperator, FilterCondition
     filters = MetadataFilters(
-        filters=[
-            MetadataFilter(key="doc_id", value=document_id, operator=FilterOperator.EQ)
-        ],
-        condition=FilterCondition.OR,
+        filters=[MetadataFilter(key="doc_id", value=document_id, operator=FilterOperator.EQ)],
+        condition=FilterCondition.AND,
     )
+    retriever = index.as_retriever(similarity_top_k=max(1, top_k), filters=filters)
+    nodes = retriever.retrieve(f"Materi dan konsep penting tentang {topic}")
 
-    # Karena Prompt Template RAG biasanya membutuhkan format query, 
-    # kita memanipulasi prompt di Query Engine 
-    query_engine = index.as_query_engine(
-        llm=llm,
-        similarity_top_k=10, # Ambil lebih banyak context untuk soal
-        filters=filters,
-        response_mode="compact",
-    )
-    
-    query_engine.update_prompts(
-        {"response_synthesizer:text_qa_template": _QUIZ_TEMPLATE.partial_format(num_questions=num_questions, topic=topic)}
-    )
+    if not nodes:
+        # Topik mungkin tidak mirip dengan isi dokumen; ambil apa adanya.
+        nodes = index.as_retriever(similarity_top_k=max(1, top_k), filters=filters).retrieve(topic or "ringkasan materi")
 
-    # Trigger query search menggunakan topic
-    query_str = f"Materi tentang {topic}"
-    response = query_engine.query(query_str)
-    
-    response_str = str(response).strip()
-    
-    # Bersihkan markdown formatting jika model mengembalikannya
-    if response_str.startswith("```json"):
-        response_str = response_str[7:]
-    if response_str.startswith("```"):
-        response_str = response_str[3:]
-    if response_str.endswith("```"):
-        response_str = response_str[:-3]
-        
-    try:
-        questions_data = json.loads(response_str)
-        if not isinstance(questions_data, list):
-            raise ValueError("LLM response is not a list")
-        return questions_data
-    except Exception as e:
-        logger.error(f"Gagal memparsing JSON dari LLM: {e}\nResponse: {response_str}")
-        raise ValueError("Gagal men-generate soal dengan format yang benar. Silakan coba lagi.")
+    return "\n\n---\n\n".join(n.get_content().strip() for n in nodes if n.get_content().strip())
 
 
-async def generate_quiz(
+def _generate_quiz_sync(
     user_id: str,
-    document_id: str,
+    document_id: str | None,
     topic: str,
     num_questions: int,
     base_url: str,
     api_key: str,
     model_name: str,
     embedding_model: str,
+    top_k: int = 12,
+) -> list[dict]:
+    """Sync generate quiz — dijalankan di thread pool.
+
+    `document_id` boleh None: kuis lalu dibuat dari pengetahuan umum model
+    sehingga user tetap bisa berlatih walau belum mengunggah materi apa pun.
+    """
+    llm = LlamaOpenAI(
+        model=model_name,
+        api_base=base_url,
+        api_key=api_key,
+        temperature=0.3,  # sedikit kreativitas untuk membuat soal
+    )
+
+    context = ""
+    if document_id:
+        context = _quiz_context_from_index(
+            user_id=user_id,
+            document_id=document_id,
+            topic=topic,
+            base_url=base_url,
+            api_key=api_key,
+            embedding_model=embedding_model,
+            top_k=top_k,
+        )
+        if not context:
+            raise ValueError(
+                "Isi dokumen tidak ditemukan di indeks. Coba unggah ulang materi tersebut di menu Materi Saya."
+            )
+
+    if context:
+        prompt = _QUIZ_TEMPLATE.format(
+            context_str=context[:24000], num_questions=num_questions, topic=topic
+        )
+    else:
+        prompt = _QUIZ_TOPIC_TEMPLATE.format(num_questions=num_questions, topic=topic)
+
+    last_raw = ""
+    for attempt in range(2):
+        # Percobaan kedua ditegaskan lagi formatnya kalau yang pertama meleset.
+        text = prompt if attempt == 0 else (
+            prompt + "\n\nPENTING: balasan sebelumnya tidak valid. Keluarkan HANYA array JSON, tanpa kalimat pembuka."
+        )
+        last_raw = str(llm.complete(text)).strip()
+        items = _extract_json_array(last_raw)
+        if items:
+            questions = _normalize_questions(items, num_questions)
+            if questions:
+                return questions
+
+    logger.error("Gagal memparsing JSON kuis dari LLM. Response: %s", last_raw[:1500])
+    raise ValueError(
+        "Model AI tidak mengembalikan soal dalam format yang benar. "
+        "Coba ulangi, kurangi jumlah soal, atau gunakan model yang lebih besar."
+    )
+
+
+async def generate_quiz(
+    user_id: str,
+    document_id: str | None,
+    topic: str,
+    num_questions: int,
+    base_url: str,
+    api_key: str,
+    model_name: str,
+    embedding_model: str,
+    top_k: int = 12,
 ) -> list[dict]:
     """Async wrapper untuk generate quiz."""
     return await asyncio.to_thread(
         _generate_quiz_sync,
-        user_id, document_id, topic, num_questions, 
-        base_url, api_key, model_name, embedding_model,
+        user_id, document_id, topic, num_questions,
+        base_url, api_key, model_name, embedding_model, top_k,
     )
 

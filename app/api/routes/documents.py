@@ -16,10 +16,11 @@ from app.models.model_config import ModelConfig
 from app.models.user import User
 from app.schemas.document import DocumentResponse
 from app.services import rag
+from app.services.preferences import get_preferences
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
-ALLOWED_EXTENSIONS = {".pdf", ".txt", ".md"}
+ALLOWED_EXTENSIONS = {".pdf", ".txt", ".md", ".docx"}
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 
 
@@ -31,6 +32,8 @@ async def _run_indexing(
     api_key: str,
     embedding_model: str,
     db_url: str,
+    chunk_size: int = 512,
+    chunk_overlap: int = 64,
 ) -> None:
     """Background task: index dokumen dan perbarui status di DB."""
     # Buat session DB baru untuk background task
@@ -52,6 +55,8 @@ async def _run_indexing(
                 base_url=base_url,
                 api_key=api_key,
                 embedding_model=embedding_model,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
             )
             doc.status = "indexed"
         except Exception as exc:
@@ -119,6 +124,9 @@ async def upload_document(
     file_path = user_dir / safe_name
     file_path.write_bytes(content)
 
+    # Setelan potongan dokumen dari Pengaturan > Pusat Pengetahuan
+    prefs = await get_preferences(db, current_user.id)
+
     # Simpan record ke DB
     doc = Document(
         id=doc_id,
@@ -138,9 +146,11 @@ async def upload_document(
         user_id=str(current_user.id),
         file_path=str(file_path),
         base_url=model_cfg.base_url,
-        api_key=decrypt_api_key(model_cfg.api_key_encrypted),
+        api_key=decrypt_api_key(model_cfg.api_key_encrypted) or "dummy",
         embedding_model=model_cfg.embedding_model,
         db_url=settings.DATABASE_URL,
+        chunk_size=prefs.chunk_size,
+        chunk_overlap=prefs.chunk_overlap,
     )
 
     return doc

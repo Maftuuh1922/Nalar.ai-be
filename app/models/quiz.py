@@ -17,9 +17,10 @@ class Quiz(Base):
         Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False, index=True,
     )
-    document_id: Mapped[uuid.UUID] = mapped_column(
+    # Boleh kosong: kuis bisa dibuat dari topik bebas tanpa dokumen rujukan.
+    document_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        nullable=True, index=True,
     )
     topic: Mapped[str] = mapped_column(String(255), nullable=False)
     questions_data: Mapped[list[dict]] = mapped_column(JSON, nullable=False)

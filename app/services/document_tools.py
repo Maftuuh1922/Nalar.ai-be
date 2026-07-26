@@ -1,10 +1,19 @@
 """Modul tool untuk membaca dan mencari dokumen secara agentic."""
 
+import asyncio
 import json
 import logging
+import re
 from typing import Any
 import uuid
-from duckduckgo_search import DDGS
+
+# Paket `duckduckgo_search` sudah tidak dirawat dan backend-nya sering
+# mengembalikan nol hasil. `ddgs` adalah kelanjutannya; paket lama dipakai
+# hanya sebagai cadangan bila `ddgs` belum terpasang.
+try:
+    from ddgs import DDGS
+except ImportError:  # pragma: no cover - hanya untuk lingkungan lama
+    from duckduckgo_search import DDGS
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -141,25 +150,131 @@ async def search_in_document(db: AsyncSession, user_id: uuid.UUID, document_id_o
         logger.error(f"Error in search_in_document: {e}")
         return json.dumps({"error": f"Kesalahan pencarian: {e}"})
 
-async def search_web(query: str, max_results: int = 5, **kwargs) -> str:
-    """Mencari informasi di internet menggunakan DuckDuckGo."""
+# Urutan backend pencarian yang dicoba. Satu backend bisa kosong atau kena
+# pembatasan sesaat, jadi jangan menyerah setelah percobaan pertama.
+_SEARCH_BACKENDS = ("auto", "brave", "duckduckgo", "bing")
+
+
+def _run_search(query: str, max_results: int, backend: str) -> list[dict[str, Any]]:
+    """Satu percobaan pencarian (blocking) memakai backend tertentu."""
     try:
-        results = DDGS().text(query, max_results=max_results)
-        if not results:
-            return json.dumps({"message": f"Tidak ada hasil pencarian untuk '{query}'"})
-            
-        formatted_results = []
-        for r in results:
-            formatted_results.append({
+        return DDGS().text(query, max_results=max_results, backend=backend) or []
+    except TypeError:
+        # Versi lama tidak menerima argumen `backend`.
+        return DDGS().text(query, max_results=max_results) or []
+
+
+async def search_web(query: str, max_results: int = 5, **kwargs) -> str:
+    """Mencari informasi di internet.
+
+    Beberapa backend dicoba bergantian karena satu penyedia sering
+    mengembalikan nol hasil tanpa alasan jelas. Pesan balasan sengaja
+    menyarankan langkah lanjutan supaya agen mencoba kata kunci lain
+    alih-alih menyerah dan meminta maaf ke user.
+    """
+    query = (query or "").strip()
+    if not query:
+        return json.dumps({"error": "Kata kunci pencarian kosong."})
+
+    try:
+        max_results = max(1, min(int(max_results or 5), 20))
+    except (TypeError, ValueError):
+        max_results = 5
+
+    errors: list[str] = []
+    for backend in _SEARCH_BACKENDS:
+        try:
+            # DDGS bersifat blocking; jalankan di thread agar event loop bebas.
+            results = await asyncio.to_thread(_run_search, query, max_results, backend)
+        except Exception as exc:
+            errors.append(f"{backend}: {exc}")
+            logger.warning(f"search_web backend '{backend}' gagal: {exc}")
+            continue
+
+        formatted = [
+            {
                 "title": r.get("title", ""),
-                "body": r.get("body", ""),
-                "url": r.get("href", "")
-            })
-            
-        return json.dumps({"results": formatted_results})
+                "body": r.get("body") or r.get("description", ""),
+                "url": r.get("href") or r.get("url", ""),
+            }
+            for r in results
+            if r.get("href") or r.get("url")
+        ]
+        if formatted:
+            return json.dumps({"results": formatted, "backend": backend})
+        errors.append(f"{backend}: kosong")
+
+    logger.info(f"search_web tidak menemukan hasil untuk '{query}' ({'; '.join(errors)})")
+    return json.dumps({
+        "results": [],
+        "message": (
+            f"Belum ada hasil untuk '{query}'. Coba lagi dengan kata kunci lain "
+            "(lebih umum, bahasa Inggris, atau tambahkan 'filetype:pdf'). "
+            "Jangan menyerah setelah satu percobaan."
+        ),
+    })
+
+_BLOCKED_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "::1", "metadata.google.internal", "169.254.169.254"}
+_STRIP_TAGS = ("script", "style", "nav", "header", "footer", "aside", "noscript", "form", "svg", "iframe")
+
+
+async def fetch_webpage(url: str, max_chars: int = 8000, **kwargs) -> str:
+    """Membuka sebuah URL dan mengembalikan isi teks halamannya.
+
+    Dipakai agen ketika cuplikan dari ``search_web`` belum cukup dan ia perlu
+    melihat detail isi halaman sebelum mengutipnya di laporan.
+    """
+    import httpx
+    from bs4 import BeautifulSoup
+    from urllib.parse import urlparse
+
+    parsed = urlparse((url or "").strip())
+    if parsed.scheme not in ("http", "https"):
+        return json.dumps({"error": "URL harus diawali http:// atau https://"})
+    # Jangan biarkan model mengarahkan permintaan ke jaringan internal server.
+    if (parsed.hostname or "").lower() in _BLOCKED_HOSTS:
+        return json.dumps({"error": "Alamat internal tidak boleh diakses."})
+
+    try:
+        max_chars = max(500, min(int(max_chars or 8000), 20000))
+    except (TypeError, ValueError):
+        max_chars = 8000
+
+    try:
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=20.0,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; NalarAI/1.0; +https://nalar.ai)"},
+        ) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+
+        content_type = response.headers.get("content-type", "")
+        if "html" not in content_type and "text" not in content_type:
+            return json.dumps({"error": f"Jenis konten tidak didukung: {content_type or 'tidak diketahui'}"})
+
+        soup = BeautifulSoup(response.text, "html.parser")
+        for tag in soup(list(_STRIP_TAGS)):
+            tag.decompose()
+
+        title = soup.title.get_text(strip=True) if soup.title else url
+        main = soup.find("article") or soup.find("main") or soup.body or soup
+        text = re.sub(r"\n{3,}", "\n\n", main.get_text("\n", strip=True))
+
+        truncated = len(text) > max_chars
+        return json.dumps({
+            "url": str(response.url),
+            "title": title,
+            "text": text[:max_chars],
+            "truncated": truncated,
+            "chars": len(text),
+        })
+    except httpx.HTTPStatusError as e:
+        return json.dumps({"error": f"Halaman menolak permintaan (HTTP {e.response.status_code})."})
     except Exception as e:
-        logger.error(f"Error in search_web: {e}")
-        return json.dumps({"error": f"Kesalahan pencarian web: {e}"})
+        logger.error(f"Error in fetch_webpage({url}): {e}")
+        return json.dumps({"error": f"Gagal membuka halaman: {e}"})
+
 
 # Skema OpenAI untuk tool calling
 DOCUMENT_TOOLS = [
@@ -237,6 +352,33 @@ DOCUMENT_TOOLS = [
                     }
                 },
                 "required": ["query"],
+                "additionalProperties": False
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "fetch_webpage",
+            "description": (
+                "Membuka satu URL hasil pencarian dan membaca ISI LENGKAP halamannya. "
+                "Gunakan setelah search_web ketika cuplikan hasil pencarian belum cukup "
+                "untuk menulis laporan atau saat kamu perlu mengutip detail, angka, dan "
+                "kutipan yang akurat dari sumber tersebut."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "URL lengkap halaman yang ingin dibaca (harus http/https)."
+                    },
+                    "max_chars": {
+                        "type": "integer",
+                        "description": "Batas jumlah karakter teks yang dikembalikan (default 8000)."
+                    }
+                },
+                "required": ["url"],
                 "additionalProperties": False
             }
         }

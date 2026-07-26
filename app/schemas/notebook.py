@@ -1,6 +1,7 @@
 """Schemas Pydantic untuk model Notebook."""
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -19,6 +20,10 @@ class NotebookUpdate(BaseModel):
 class DocxExportRequest(BaseModel):
     content: str
     title: str = Field("Document", min_length=1, max_length=255)
+    format: Literal["html", "markdown"] = Field(
+        "markdown",
+        description="Format isi 'content'. Editor catatan mengirim 'html'.",
+    )
 
 
 class NotebookResponse(BaseModel):

@@ -1,7 +1,15 @@
 __pycache__/
 *.pyc
 .env
-nalar.db
+
+# Basis data lokal. Baris lama menulis `nalar.db`, padahal berkas yang dipakai
+# bernama `nalar_ai.db` — akibatnya data pengguna (termasuk kunci API terenkripsi)
+# nyaris ikut ter-commit.
+*.db
+*.db-journal
+*.db.bak-*
+
 chroma_db/
 uploads/
 .venv/
+venv/

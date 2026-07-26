@@ -13,7 +13,8 @@ class QuestionSchema(BaseModel):
 
 
 class QuizCreate(BaseModel):
-    document_id: UUID
+    # None berarti soal dibuat dari topik bebas (tanpa dokumen rujukan).
+    document_id: UUID | None = None
     topic: str = Field(..., min_length=1, max_length=255)
     num_questions: int = Field(default=5, ge=1, le=20)
 
@@ -21,7 +22,7 @@ class QuizCreate(BaseModel):
 class QuizResponse(BaseModel):
     id: UUID
     user_id: UUID
-    document_id: UUID
+    document_id: UUID | None
     topic: str
     questions_data: list[QuestionSchema]
     created_at: datetime

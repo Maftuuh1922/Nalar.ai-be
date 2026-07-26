@@ -1,5 +1,6 @@
 """Endpoint pengaturan model AI per user."""
 
+import json
 import uuid
 from datetime import datetime, timezone
 
@@ -8,11 +9,17 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
-from app.core.encryption import encrypt_api_key
+from app.core.encryption import decrypt_api_key, encrypt_api_key
 from app.db.session import get_db
 from app.models.model_config import ModelConfig
 from app.models.user import User
-from app.schemas.model_config import ModelConfigRequest, ModelConfigResponse
+from app.schemas.model_config import (
+    DetectRequest,
+    DetectResponse,
+    ModelConfigRequest,
+    ModelConfigResponse,
+)
+from app.services.model_probe import probe_endpoint
 
 router = APIRouter(prefix="/settings/model", tags=["settings"])
 
@@ -64,6 +71,9 @@ async def create_setting(
         model_name=payload.model_name,
         embedding_model=payload.embedding_model,
         is_active=is_active,
+        capabilities=json.dumps(payload.capabilities),
+        provider_type=payload.provider_type,
+        context_window=payload.context_window,
     )
     db.add(new_config)
     await db.commit()
@@ -91,6 +101,9 @@ async def update_setting(
         existing.api_key_encrypted = encrypt_api_key(payload.api_key)
     existing.model_name = payload.model_name
     existing.embedding_model = payload.embedding_model
+    existing.capabilities = json.dumps(payload.capabilities)
+    existing.provider_type = payload.provider_type
+    existing.context_window = payload.context_window
     existing.updated_at = datetime.now(timezone.utc)
     
     if payload.is_active and not existing.is_active:
@@ -133,6 +146,40 @@ async def set_active_setting(
     await db.commit()
     await db.refresh(existing)
     return existing
+
+
+@router.post("/detect", response_model=DetectResponse)
+async def detect_capabilities(
+    payload: DetectRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> DetectResponse:
+    """Uji koneksi ke endpoint AI dan simpulkan kemampuannya.
+
+    Pemeriksaan dilakukan sungguhan (daftar model, chat kecil, tool call,
+    gambar 1x1 piksel, embedding) supaya hasilnya bisa dipercaya, bukan
+    sekadar tebakan dari nama model.
+    """
+    api_key = payload.api_key
+    if not api_key and payload.config_id:
+        # Form pengaturan tidak pernah mengirim ulang key yang sudah tersimpan.
+        existing = await db.scalar(
+            select(ModelConfig).where(
+                ModelConfig.id == payload.config_id,
+                ModelConfig.user_id == current_user.id,
+            )
+        )
+        if not existing:
+            raise HTTPException(status_code=404, detail="Konfigurasi tidak ditemukan")
+        api_key = decrypt_api_key(existing.api_key_encrypted)
+
+    result = await probe_endpoint(
+        base_url=payload.base_url,
+        api_key=api_key,
+        model_name=payload.model_name,
+        embedding_model=payload.embedding_model,
+    )
+    return DetectResponse(**result)
 
 
 @router.delete("/{id}")

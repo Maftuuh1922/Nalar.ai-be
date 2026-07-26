@@ -19,6 +19,9 @@ config = context.config
 # (mis. `postgresql+psycopg+asyncio://`) karena itu hanya untuk async engine.
 # Jika ada suffix async, strip dulu sebelum diserahkan ke Alembic.
 _sync_url = settings.DATABASE_URL.replace("+asyncio", "")
+# SQLite dipakai untuk pengembangan lokal dengan driver async `aiosqlite`.
+# Alembic berjalan sinkron, jadi turunkan ke driver bawaan `sqlite3`.
+_sync_url = _sync_url.replace("sqlite+aiosqlite://", "sqlite://")
 config.set_main_option("sqlalchemy.url", _sync_url)
 
 if config.config_file_name is not None:

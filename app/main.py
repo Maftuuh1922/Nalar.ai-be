@@ -13,6 +13,8 @@ from app.api.routes.quiz import router as quiz_router
 from app.api.routes.progress import router as progress_router
 from app.api.routes.agents import router as agents_router
 from app.api.routes.notebooks import router as notebooks_router
+from app.api.routes.research import router as research_router
+from app.api.routes.preferences import router as preferences_router
 # from app.api.routes.storm import router as storm_router
 from app.core.config import settings
 from app.db.base import Base
@@ -59,6 +61,8 @@ app.include_router(quiz_router, prefix=settings.API_PREFIX)
 app.include_router(progress_router, prefix=settings.API_PREFIX)
 app.include_router(agents_router, prefix=settings.API_PREFIX)
 app.include_router(notebooks_router, prefix=settings.API_PREFIX)
+app.include_router(research_router, prefix=settings.API_PREFIX)
+app.include_router(preferences_router, prefix=settings.API_PREFIX)
 # app.include_router(storm_router, prefix=settings.API_PREFIX)
 
 

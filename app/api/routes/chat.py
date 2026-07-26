@@ -21,6 +21,7 @@ from app.models.chat_session import ChatSession
 from app.schemas.chat import ChatHistoryItem, ChatRequest, ChatResponse, Source
 from app.schemas.chat_session import ChatSessionResponse, ChatSessionCreate
 from app.services.agentic_chat import run_agentic_chat_stream
+from app.services.preferences import build_http_client, get_preferences
 from pydantic import BaseModel
 
 class SuggestionRequest(BaseModel):
@@ -48,6 +49,9 @@ async def chat(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Tidak ada konfigurasi model AI yang aktif. Silakan atur dan aktifkan konfigurasi di halaman Pengaturan.",
         )
+
+    # Setelan dari Pengaturan > Percakapan & Jaringan
+    prefs = await get_preferences(db, current_user.id)
 
     from sqlalchemy import func as sql_func
     # Cek apakah ada dokumen yang sudah terindeks
@@ -84,7 +88,9 @@ async def chat(
             .where(ChatHistory.session_id == session_id)
             .order_by(ChatHistory.created_at.asc())
         )
-        for record in history_records.all()[-10:]:  # Keep last 10 messages for context
+        history_window = max(0, prefs.history_limit)
+        all_records = history_records.all()
+        for record in (all_records[-history_window:] if history_window else []):
             if getattr(record, 'images_json', None):
                 try:
                     images = json.loads(record.images_json)
@@ -131,10 +137,14 @@ async def chat(
         if all_user_doc_ids:
             document_ids = all_user_doc_ids
 
-    # Inisialisasi client OpenAI
+    # Inisialisasi client OpenAI. http_client hanya dibuat kalau user memakai
+    # proxy; kalau None, SDK memakai client bawaannya.
+    proxy_client = build_http_client(prefs)
     client = AsyncOpenAI(
         api_key=api_key or "dummy",
         base_url=model_cfg.base_url,
+        timeout=float(prefs.request_timeout),
+        http_client=proxy_client,
     )
 
     # Beri tahu AI dokumen apa saja yang spesifik dipilih user
@@ -170,7 +180,13 @@ async def chat(
                 db=db,
                 user_id=current_user.id,
                 chat_history=chat_history_list,
-                enable_rtk=payload.enable_rtk
+                enable_rtk=payload.enable_rtk,
+                max_tokens=prefs.chat_max_tokens,
+                temperature=prefs.chat_temperature,
+                enable_web_tools=prefs.enable_web_tools,
+                enable_document_tools=prefs.enable_document_tools,
+                custom_instructions=prefs.custom_instructions,
+                retrieval_top_k=prefs.retrieval_top_k,
             ):
                 # Try to parse the chunk to accumulate text
                 try:
@@ -183,8 +199,8 @@ async def chat(
                     pass
                 yield chunk
                 
-            # Generate suggestions inline
-            if full_text:
+            # Generate suggestions inline (bisa dimatikan lewat Pengaturan)
+            if full_text and prefs.enable_suggestions:
                 try:
                     sugg_prompt = f"Berdasarkan jawaban ini:\n\n{full_text[:1500]}\n\nBerikan HANYA 3 saran pertanyaan singkat lanjutan dalam format JSON array string. Contoh: [\"Apa itu X?\", \"Bagaimana cara Y?\", \"Jelaskan Z\"]"
                     sugg_response = await client.chat.completions.create(
@@ -217,6 +233,8 @@ async def chat(
             )
             db.add(ai_msg)
             await db.commit()
+            if proxy_client is not None:
+                await proxy_client.aclose()
 
     return StreamingResponse(stream_generator(), media_type="application/x-ndjson")
 
@@ -237,6 +255,10 @@ async def get_chat_suggestions(
     if not model_cfg:
         return []
 
+    prefs = await get_preferences(db, current_user.id)
+    if not prefs.enable_suggestions:
+        return []
+
     # Get last assistant message
     history_records = await db.scalars(
         select(ChatHistory)
@@ -251,7 +273,13 @@ async def get_chat_suggestions(
     last_assistant_msg = history[0].content
 
     api_key = decrypt_api_key(model_cfg.api_key_encrypted)
-    client = AsyncOpenAI(api_key=api_key or "dummy", base_url=model_cfg.base_url)
+    proxy_client = build_http_client(prefs)
+    client = AsyncOpenAI(
+        api_key=api_key or "dummy",
+        base_url=model_cfg.base_url,
+        timeout=float(prefs.request_timeout),
+        http_client=proxy_client,
+    )
 
     prompt = f"Berdasarkan jawaban terakhir asisten AI ini:\n\n{last_assistant_msg[:2000]}\n\nBuatlah tepat 3 saran pertanyaan lanjutan singkat (maksimal 10 kata per pertanyaan) yang relevan untuk ditanyakan oleh pengguna. Format output HANYA array JSON string tanpa markdown, contoh: [\"Apa maksud dari X?\", \"Bagaimana cara Y?\", \"Jelaskan Z\"]"
 
@@ -273,6 +301,9 @@ async def get_chat_suggestions(
         import logging
         logging.error(f"Error generating suggestions: {e}")
         return []
+    finally:
+        if proxy_client is not None:
+            await proxy_client.aclose()
 
 
 
@@ -290,6 +321,29 @@ async def get_chat_sessions(
         .order_by(ChatSession.updated_at.desc())
     )
     return list(result.all())
+
+
+class ChatSessionUpdate(BaseModel):
+    title: str
+
+
+@router.put("/sessions/{session_id}", response_model=ChatSessionResponse)
+async def rename_chat_session(
+    session_id: uuid.UUID,
+    payload: ChatSessionUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ChatSession:
+    """Ubah judul sebuah sesi chat."""
+    sess = await db.scalar(
+        select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == current_user.id)
+    )
+    if not sess:
+        raise HTTPException(status_code=404, detail="Sesi chat tidak ditemukan")
+    sess.title = payload.title.strip()[:255] or sess.title
+    await db.commit()
+    await db.refresh(sess)
+    return sess
 
 
 @router.delete("/sessions/{session_id}")

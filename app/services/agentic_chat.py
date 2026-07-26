@@ -1,14 +1,130 @@
 import json
 import logging
+import re
 import uuid
 from typing import AsyncGenerator, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from openai import AsyncOpenAI
 
-from app.services.document_tools import list_documents, read_document, search_in_document, search_web, DOCUMENT_TOOLS
+from app.services.document_tools import (
+    list_documents,
+    read_document,
+    search_in_document,
+    search_web,
+    fetch_webpage,
+    DOCUMENT_TOOLS,
+)
 
 logger = logging.getLogger(__name__)
+
+# --------------------------------------------------------------------------
+# Penyelamat tool-call mentah
+#
+# Sebagian endpoint (mis. gateway yang membungkus DeepSeek) tidak mengurai
+# panggilan tool dan malah mengalirkan markup internal model apa adanya ke
+# dalam teks jawaban, seperti:
+#
+#   <|｜DSML|｜tool_calls><|｜DSML|｜invoke name="search_web"> ...
+#
+# Kalau dibiarkan, user melihat markup mentah dan alurnya berhenti — diagram
+# atau hasil pencarian tidak pernah muncul. Kita kenali polanya, jalankan
+# toolnya seperti panggilan normal, dan buang markup itu dari jawaban.
+# --------------------------------------------------------------------------
+
+# `｜` (U+FF5C) dan `|` biasa dipakai bergantian oleh model, jumlahnya pun bisa 1-2.
+_BAR = r"[|｜]{1,2}"
+_DSML_BLOCK = re.compile(rf"<{_BAR}DSML{_BAR}tool_calls>.*?(?:</{_BAR}DSML{_BAR}tool_calls>|\Z)", re.DOTALL)
+_DSML_INVOKE = re.compile(
+    rf"<{_BAR}DSML{_BAR}invoke\s+name=\"([^\"]+)\"\s*>(.*?)</{_BAR}DSML{_BAR}invoke>", re.DOTALL
+)
+_DSML_PARAM = re.compile(
+    rf"<{_BAR}DSML{_BAR}parameter\s+name=\"([^\"]+)\"(?:\s+string=\"(true|false)\")?\s*>"
+    rf"(.*?)</{_BAR}DSML{_BAR}parameter>",
+    re.DOTALL,
+)
+# Awal markup yang perlu ditahan agar tidak keburu terkirim ke klien.
+_DSML_START = re.compile(rf"<{_BAR}DSML")
+
+
+def _parse_dsml_tool_calls(text: str) -> list[dict[str, Any]]:
+    """Ubah markup tool-call mentah menjadi struktur tool_call ala OpenAI."""
+    calls: list[dict[str, Any]] = []
+    for name, body in _DSML_INVOKE.findall(text):
+        args: dict[str, Any] = {}
+        for arg_name, is_string, raw in _DSML_PARAM.findall(body):
+            value = raw.strip()
+            if is_string == "false":
+                # Parameter non-string: angka/bool/JSON. Kalau gagal, pakai apa adanya.
+                try:
+                    value = json.loads(value)
+                except Exception:
+                    pass
+            args[arg_name] = value
+        calls.append({
+            "id": f"dsml_{uuid.uuid4().hex[:12]}",
+            "type": "function",
+            "function": {"name": name, "arguments": json.dumps(args, ensure_ascii=False)},
+        })
+    return calls
+
+
+def _strip_dsml(text: str) -> str:
+    """Buang seluruh markup tool-call mentah dari teks jawaban.
+
+    Bagian sebelum markup sengaja tidak dipangkas agar posisi karakternya tetap
+    sama — penahan streaming memakai indeks itu untuk tahu apa yang sudah dikirim.
+    """
+    return _DSML_BLOCK.sub("", text)
+
+
+def _extract_sources(tool_name: str, raw_result: str, tool_args: dict[str, Any]) -> list[dict[str, str]]:
+    """Ambil daftar sumber (judul + url/lokasi) dari hasil sebuah tool.
+
+    Dipakai frontend untuk menyusun daftar pustaka otomatis di editor catatan.
+    Selalu mengembalikan list — kegagalan parsing tidak boleh menghentikan stream.
+    """
+    try:
+        payload = json.loads(raw_result)
+    except Exception:
+        return []
+    if not isinstance(payload, dict):
+        return []
+
+    sources: list[dict[str, str]] = []
+
+    if tool_name == "search_web":
+        for item in payload.get("results", [])[:10]:
+            url = (item.get("url") or "").strip()
+            if not url:
+                continue
+            sources.append({
+                "type": "web",
+                "title": (item.get("title") or url).strip(),
+                "url": url,
+                "snippet": (item.get("body") or "").strip()[:300],
+            })
+    elif tool_name == "fetch_webpage":
+        url = (payload.get("url") or tool_args.get("url") or "").strip()
+        if url and not payload.get("error"):
+            sources.append({
+                "type": "web",
+                "title": (payload.get("title") or url).strip(),
+                "url": url,
+                "snippet": (payload.get("text") or "").strip()[:300],
+            })
+    elif tool_name in ("read_document", "search_in_document"):
+        ref = (
+            payload.get("filename")
+            or payload.get("document")
+            or tool_args.get("document_id_or_filename")
+            or ""
+        )
+        if ref:
+            sources.append({"type": "document", "title": str(ref), "url": "", "snippet": ""})
+
+    return sources
+
 
 async def run_agentic_chat_stream(
     client: AsyncOpenAI,
@@ -19,23 +135,66 @@ async def run_agentic_chat_stream(
     user_id: uuid.UUID,
     user_images: list[str] | None = None,
     chat_history: list[dict] | None = None,
-    enable_rtk: bool = False
+    enable_rtk: bool = False,
+    max_tokens: int = 8000,
+    temperature: float = 0.7,
+    enable_web_tools: bool = True,
+    enable_document_tools: bool = True,
+    custom_instructions: str | None = None,
+    retrieval_top_k: int = 5,
 ) -> AsyncGenerator[str, None]:
     """
     Menjalankan loop tool-calling agentic untuk merespons pesan user secara streaming.
     Yields JSON string events:
     - {"event": "text", "data": "chunk"}
     - {"event": "tool_call", "name": "...", "args": "..."}
-    - {"event": "tool_result", "name": "...", "result": "..."}
+    - {"event": "tool_result", "name": "...", "result": "...", "sources": [...]}
+    - {"event": "truncated"}  (jawaban berhenti karena kena batas token)
     - {"event": "end"}
     """
     messages = []
     
     markdown_instruction = "Gunakan format teks akademik yang rapi dan terstruktur (termasuk tabel jika ada data yang perlu dirangkum/dibandingkan) agar penjelasanmu seperti buku teks atau jurnal. DILARANG KERAS menggunakan emoji atau emoticon (seperti 😊, 📚, dll) dalam seluruh jawabanmu. Pertahankan nada formal dan ilmiah. JIKA kamu membuat tabel perbandingan atau rangkuman, WAJIB tambahkan 'Kesimpulan' singkat di bawah tabel tersebut yang menyoroti inti perbedaannya. JIKA pengguna meminta untuk dibuatkan diagram, struktur, mindmap, atau flowchart, berikan kode XML Draw.io murni di dalam blok kode ````drawio ... ````. Kode XML harus valid, diawali dengan <mxfile> dan diakhiri dengan </mxfile>. PENTING TENTANG DIAGRAM: Gunakan layout yang terstruktur dan luas, jangan sampai node saling bertumpuk (overlap). Beri jarak (spacing) yang jauh antar node (minimal 120px vertikal dan horisontal). Pastikan ukuran (width & height) setiap node cukup besar (misal width=180, height=80) atau disesuaikan otomatis dengan panjang teks (autosize=1). Gunakan panah yang rapi: edgeStyle=orthogonalEdgeStyle;rounded=1;. Gunakan warna profesional dan bedakan warna tiap level/cabang. Jika pengguna memberikan [Context Diagram Draw.io Saat Ini] pada promptnya, PENTING: modifikasi dan kembalikan SELURUH kode XML terbaru secara utuh yang sudah merangkum permintaannya."
-    if agent_system_prompt:
-        messages.append({"role": "system", "content": f"{agent_system_prompt}\n\n{markdown_instruction}"})
+    # Aturan pemakaian tool. Tanpa ini, model kerap menjawab "maaf, saya tidak
+    # bisa mencari di internet" padahal tool pencarian tersedia dan hanya
+    # mengembalikan nol hasil pada percobaan pertama.
+    tool_instruction = (
+        "ATURAN PEMAKAIAN TOOL (WAJIB):\n"
+        "- Kamu PUNYA akses internet lewat tool `search_web` dan `fetch_webpage`, "
+        "serta akses dokumen user lewat `list_documents`, `read_document`, dan "
+        "`search_in_document`. Kamu TIDAK BOLEH bilang tidak punya akses.\n"
+        "- Saat user meminta informasi, dokumen, referensi, berita, atau data terbaru, "
+        "PANGGIL `search_web` lebih dulu. Jangan menjawab dari ingatan saja.\n"
+        "- Kalau hasil pencarian kosong, ULANGI dengan kata kunci berbeda minimal "
+        "DUA kali lagi: pakai istilah bahasa Inggris, kata kunci yang lebih umum, "
+        "atau tambahkan `filetype:pdf` untuk mencari dokumen.\n"
+        "- Buka halaman yang paling menjanjikan dengan `fetch_webpage` supaya isinya "
+        "benar-benar dibaca, bukan hanya cuplikan hasil pencarian.\n"
+        "- DILARANG membalas dengan permintaan maaf seperti 'saya tidak dapat memenuhi "
+        "permintaan' atau 'terkendala keterbatasan akses' sebelum benar-benar mencoba "
+        "tool beberapa kali. Kalau setelah beberapa percobaan tetap nihil, sebutkan "
+        "kata kunci apa saja yang sudah dicoba, lalu tawarkan sudut pencarian lain.\n"
+        "- Selalu sertakan judul dan URL sumber yang kamu pakai."
+    )
+    # Daftar tool disaring sesuai Pengaturan > Percakapan. Kalau semua tool
+    # dimatikan, model dijalankan tanpa tool sama sekali.
+    _WEB_TOOL_NAMES = {"search_web", "fetch_webpage"}
+    active_tools = [
+        tool for tool in DOCUMENT_TOOLS
+        if (tool["function"]["name"] in _WEB_TOOL_NAMES and enable_web_tools)
+        or (tool["function"]["name"] not in _WEB_TOOL_NAMES and enable_document_tools)
+    ]
+
+    if active_tools:
+        base_instruction = f"{markdown_instruction}\n\n{tool_instruction}"
     else:
-        messages.append({"role": "system", "content": markdown_instruction})
+        base_instruction = markdown_instruction
+    if custom_instructions:
+        base_instruction = f"{base_instruction}\n\nINSTRUKSI KHUSUS DARI PENGGUNA:\n{custom_instructions}"
+    if agent_system_prompt:
+        messages.append({"role": "system", "content": f"{agent_system_prompt}\n\n{base_instruction}"})
+    else:
+        messages.append({"role": "system", "content": base_instruction})
     
     if chat_history:
         messages.extend(chat_history)
@@ -70,13 +229,16 @@ async def run_agentic_chat_stream(
         api_kwargs = {
             "model": model_name,
             "messages": messages,
-            "temperature": 0.7,
+            "temperature": temperature,
             "stream": True,
+            # Tanpa batas eksplisit banyak provider memakai default kecil (~1000 token),
+            # sehingga laporan panjang terpotong di tengah halaman pertama.
+            "max_tokens": max_tokens,
             "stream_options": {"include_usage": True}
         }
         
-        if not force_answer:
-            api_kwargs["tools"] = DOCUMENT_TOOLS
+        if not force_answer and active_tools:
+            api_kwargs["tools"] = active_tools
             api_kwargs["tool_choice"] = "auto"
 
         try:
@@ -91,7 +253,12 @@ async def run_agentic_chat_stream(
         tool_calls = {}
         content_buffer = ""
         reasoning_buffer = ""
-        
+        finish_reason = None
+        # Penahan agar markup tool-call mentah tidak sempat terkirim ke klien.
+        emitted_len = 0
+        dsml_seen = False
+        HOLD_BACK = 16  # cukup untuk menampung awalan "<|｜DSML|｜" yang terpotong antar-chunk
+
         async for chunk in stream:
             if hasattr(chunk, 'usage') and chunk.usage:
                 usage_data = {
@@ -112,15 +279,29 @@ async def run_agentic_chat_stream(
                 if cumulative_usage["total_tokens"] > 0:
                     yield json.dumps({"event": "usage", "data": cumulative_usage}) + "\n"
 
+            if chunk.choices and getattr(chunk.choices[0], "finish_reason", None):
+                finish_reason = chunk.choices[0].finish_reason
+
             delta = chunk.choices[0].delta if chunk.choices else None
             if not delta:
                 continue
                 
-            # Stream normal text
+            # Stream normal text — ditahan sedikit supaya markup tool-call mentah
+            # bisa dikenali sebelum terlanjur tampil di layar user.
             if delta.content:
                 content_buffer += delta.content
-                yield json.dumps({"event": "text", "data": delta.content}) + "\n"
-                
+                if not dsml_seen:
+                    marker = _DSML_START.search(content_buffer, max(0, emitted_len))
+                    if marker:
+                        dsml_seen = True
+                        safe_end = marker.start()
+                    else:
+                        safe_end = max(emitted_len, len(content_buffer) - HOLD_BACK)
+                    if safe_end > emitted_len:
+                        yield json.dumps({"event": "text", "data": content_buffer[emitted_len:safe_end]}) + "\n"
+                        emitted_len = safe_end
+
+
             # Deepseek specific reasoning streaming (if supported by model)
             if hasattr(delta, 'reasoning_content') and delta.reasoning_content:
                 reasoning_buffer += delta.reasoning_content
@@ -144,6 +325,26 @@ async def run_agentic_chat_stream(
                         if tc.function and tc.function.arguments:
                             tool_calls[tc.index]["function"]["arguments"] += tc.function.arguments
                             
+        # Endpoint yang tidak mengurai tool-call menaruh markup mentahnya di teks.
+        # Ambil alih: jalankan toolnya, dan bersihkan markup dari jawaban.
+        if dsml_seen:
+            if not tool_calls:
+                recovered = _parse_dsml_tool_calls(content_buffer)
+                if recovered:
+                    logger.info(f"Memulihkan {len(recovered)} tool call dari markup mentah")
+                    tool_calls = dict(enumerate(recovered))
+                else:
+                    logger.warning("Markup tool-call mentah terdeteksi tapi gagal diurai")
+            content_buffer = _strip_dsml(content_buffer)
+
+        # Kirim sisa teks yang masih ditahan penahan markup
+        if emitted_len < len(content_buffer):
+            tail = content_buffer[emitted_len:]
+            if tail.strip():
+                yield json.dumps({"event": "text", "data": tail}) + "\n"
+            emitted_len = len(content_buffer)
+        content_buffer = content_buffer.strip()
+
         # Reconstruct the assistant message to append to history
         assistant_msg = {"role": "assistant"}
         if content_buffer:
@@ -156,7 +357,11 @@ async def run_agentic_chat_stream(
         messages.append(assistant_msg)
 
         if not tool_calls:
-            # Tidak ada tool calls, berarti jawaban final selesai
+            # Tidak ada tool calls, berarti jawaban final selesai.
+            # Beritahu klien bila jawaban terpotong batas token supaya bisa
+            # meminta lanjutan (laporan panjang butuh beberapa giliran).
+            if finish_reason == "length":
+                yield json.dumps({"event": "truncated"}) + "\n"
             break
 
         # Eksekusi tool calls
@@ -188,16 +393,28 @@ async def run_agentic_chat_stream(
                     doc_id = tc_args.get("document_id_or_filename", "")
                     if doc_id:
                         documents_read.add(doc_id)
+                    # Banyaknya potongan yang diambil mengikuti Pengaturan,
+                    # kecuali model sengaja menentukan sendiri.
+                    tc_args.setdefault("max_matches", retrieval_top_k)
                     tool_result_str = await search_in_document(db, user_id, **tc_args)
                 elif tc_name == "search_web":
+                    tc_args.setdefault("max_results", retrieval_top_k)
                     tool_result_str = await search_web(**tc_args)
+                elif tc_name == "fetch_webpage":
+                    tool_result_str = await fetch_webpage(**tc_args)
                 else:
                     tool_result_str = json.dumps({"error": f"Unknown tool: {tc_name}"})
             except Exception as e:
                 tool_result_str = json.dumps({"error": f"Tool execution failed: {str(e)}"})
 
-            # Beritahu frontend bahwa tool selesai
-            yield json.dumps({"event": "tool_result", "name": tc_name, "result": "Berhasil mendapatkan hasil"}) + "\n"
+            # Beritahu frontend bahwa tool selesai, sekaligus kirim daftar sumber
+            # (judul + URL) supaya editor catatan bisa menyusun daftar pustaka.
+            yield json.dumps({
+                "event": "tool_result",
+                "name": tc_name,
+                "result": "Berhasil mendapatkan hasil",
+                "sources": _extract_sources(tc_name, tool_result_str, tc_args),
+            }) + "\n"
 
             messages.append({
                 "role": "tool",

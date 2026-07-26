@@ -7,3 +7,5 @@ from app.models.chat_session import ChatSession  # noqa: F401
 from app.models.quiz_attempt import QuizAttempt  # noqa: F401
 from app.models.agent import Agent  # noqa: F401
 from app.models.notebook import Notebook  # noqa: F401
+from app.models.research_report import ResearchReport  # noqa: F401
+from app.models.user_preference import UserPreference  # noqa: F401

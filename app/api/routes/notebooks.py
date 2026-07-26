@@ -2,6 +2,7 @@
 
 import uuid
 import os
+import re
 import tempfile
 from datetime import datetime, timezone
 
@@ -15,6 +16,7 @@ from app.models.notebook import Notebook
 from app.models.user import User
 from app.schemas.notebook import NotebookCreate, NotebookResponse, NotebookUpdate, DocxExportRequest
 from app.services.docx_exporter import markdown_to_docx
+from app.services.html_docx_exporter import html_to_docx
 
 router = APIRouter(prefix="/notebooks", tags=["notebooks"])
 
@@ -113,18 +115,21 @@ async def export_to_docx(
     request: DocxExportRequest,
     current_user: User = Depends(get_current_user)
 ):
-    """Export markdown text to a Word Document (.docx)"""
+    """Export isi catatan (HTML dari editor, atau markdown) ke berkas Word (.docx)."""
     temp_dir = tempfile.gettempdir()
-    output_filename = f"{request.title.replace(' ', '_')}_{uuid.uuid4().hex[:6]}.docx"
+    safe_title = re.sub(r'[\\/:*?"<>|]', "_", request.title).strip() or "Dokumen"
+    output_filename = f"{safe_title.replace(' ', '_')}_{uuid.uuid4().hex[:6]}.docx"
     output_path = os.path.join(temp_dir, output_filename)
-    
+
     try:
-        # Convert markdown to docx
-        markdown_to_docx(request.content, output_path)
-        
+        if request.format == "html":
+            html_to_docx(request.content, output_path, title=safe_title)
+        else:
+            markdown_to_docx(request.content, output_path)
+
         return FileResponse(
             path=output_path,
-            filename=f"{request.title}.docx",
+            filename=f"{safe_title}.docx",
             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         )
     except Exception as e:

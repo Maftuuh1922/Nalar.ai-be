@@ -14,6 +14,7 @@ from app.models.quiz_attempt import QuizAttempt
 from app.models.user import User
 from app.schemas.quiz import QuizCreate, QuizResponse
 from app.schemas.quiz_attempt import QuizAttemptCreate, QuizAttemptResponse
+from app.services.preferences import get_preferences
 from app.services.rag import generate_quiz
 
 router = APIRouter(prefix="/quizzes", tags=["quizzes"])
@@ -29,14 +30,16 @@ async def create_quiz(
     """
     Generate latihan soal menggunakan RAG berdasarkan dokumen.
     """
-    # Pastikan dokumen valid dan milik user
-    doc = await db.scalar(
-        select(Document).where(Document.id == quiz_in.document_id, Document.user_id == current_user.id)
-    )
-    if not doc:
-        raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
-    if doc.status != "indexed":
-        raise HTTPException(status_code=400, detail="Dokumen belum selesai diindeks")
+    # Dokumen bersifat opsional — tanpa dokumen, soal dibuat dari topik bebas.
+    doc = None
+    if quiz_in.document_id is not None:
+        doc = await db.scalar(
+            select(Document).where(Document.id == quiz_in.document_id, Document.user_id == current_user.id)
+        )
+        if not doc:
+            raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
+        if doc.status != "indexed":
+            raise HTTPException(status_code=400, detail="Dokumen belum selesai diindeks")
 
     # Ambil konfigurasi model AI milik user
     model_cfg = await db.scalar(
@@ -45,35 +48,43 @@ async def create_quiz(
             ModelConfig.is_active == True
         )
     )
-    if not model_cfg or not model_cfg.api_key_encrypted:
+    if not model_cfg:
         raise HTTPException(
             status_code=400,
             detail="Tidak ada konfigurasi model AI yang aktif. Silakan atur dan aktifkan konfigurasi di halaman Pengaturan",
         )
 
-    api_key = decrypt_api_key(model_cfg.api_key_encrypted)
+    # Endpoint lokal boleh tanpa API key — sama seperti perilaku di menu chat.
+    api_key = decrypt_api_key(model_cfg.api_key_encrypted) or "dummy"
+
+    # Luas pengambilan materi mengikuti Pengaturan > Pusat Pengetahuan.
+    prefs = await get_preferences(db, current_user.id)
 
     try:
         # Generate soal dari LLM
         questions_data = await generate_quiz(
             user_id=str(current_user.id),
-            document_id=str(doc.id),
+            document_id=str(doc.id) if doc else None,
             topic=quiz_in.topic,
             num_questions=quiz_in.num_questions,
             base_url=model_cfg.base_url,
             api_key=api_key,
             model_name=model_cfg.model_name,
             embedding_model=model_cfg.embedding_model,
+            top_k=prefs.retrieval_top_k,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Terjadi kesalahan saat generate soal: {e}")
 
+    if not questions_data:
+        raise HTTPException(status_code=400, detail="Model AI tidak menghasilkan satu soal pun. Silakan coba lagi.")
+
     # Simpan kuis ke DB
     quiz = Quiz(
         user_id=current_user.id,
-        document_id=doc.id,
+        document_id=doc.id if doc else None,
         topic=quiz_in.topic,
         questions_data=questions_data,
     )
