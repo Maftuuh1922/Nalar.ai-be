@@ -6,14 +6,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
-from app.core.encryption import decrypt_api_key
 from app.models.document import Document
-from app.models.model_config import ModelConfig
 from app.models.quiz import Quiz
 from app.models.quiz_attempt import QuizAttempt
 from app.models.user import User
 from app.schemas.quiz import QuizCreate, QuizResponse
 from app.schemas.quiz_attempt import QuizAttemptCreate, QuizAttemptResponse
+from app.services.model_selection import ModelSelectionError, resolve_embedding, resolve_llm
 from app.services.preferences import get_preferences
 from app.services.rag import generate_quiz
 
@@ -41,21 +40,15 @@ async def create_quiz(
         if doc.status != "indexed":
             raise HTTPException(status_code=400, detail="Dokumen belum selesai diindeks")
 
-    # Ambil konfigurasi model AI milik user
-    model_cfg = await db.scalar(
-        select(ModelConfig).where(
-            ModelConfig.user_id == current_user.id,
-            ModelConfig.is_active == True
-        )
-    )
-    if not model_cfg:
+    # Ambil konfigurasi model AI milik user dari katalog
+    try:
+        llm = await resolve_llm(db, current_user.id)
+        emb = await resolve_embedding(db, current_user.id)
+    except ModelSelectionError as exc:
         raise HTTPException(
             status_code=400,
-            detail="Tidak ada konfigurasi model AI yang aktif. Silakan atur dan aktifkan konfigurasi di halaman Pengaturan",
+            detail=str(exc),
         )
-
-    # Endpoint lokal boleh tanpa API key — sama seperti perilaku di menu chat.
-    api_key = decrypt_api_key(model_cfg.api_key_encrypted) or "dummy"
 
     # Luas pengambilan materi mengikuti Pengaturan > Pusat Pengetahuan.
     prefs = await get_preferences(db, current_user.id)
@@ -67,11 +60,13 @@ async def create_quiz(
             document_id=str(doc.id) if doc else None,
             topic=quiz_in.topic,
             num_questions=quiz_in.num_questions,
-            base_url=model_cfg.base_url,
-            api_key=api_key,
-            model_name=model_cfg.model_name,
-            embedding_model=model_cfg.embedding_model,
+            base_url=llm.base_url,
+            api_key=llm.api_key or "dummy",
+            model_name=llm.model_name,
+            embedding_model=emb.model_name,
             top_k=prefs.retrieval_top_k,
+            embedding_base_url=emb.base_url,
+            embedding_api_key=emb.api_key or "dummy",
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

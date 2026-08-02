@@ -18,6 +18,11 @@ from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.llms.openai import OpenAI as LlamaOpenAI
 from llama_index.vector_stores.chroma import ChromaVectorStore
 
+try:
+    from llama_index.embeddings.fastembed import FastEmbedEmbedding
+except ImportError:  # pragma: no cover - fallback bila paket belum terpasang
+    FastEmbedEmbedding = None
+
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -38,7 +43,7 @@ _QA_BASE_TEMPLATE = (
     "Jawaban: "
 )
 
-# Prompt Deep Reasoning (Chain-of-Thought disalin dari konsep DeepTutor reason tool)
+# Prompt Deep Reasoning (Chain-of-Thought disalin dari konsep Nalar AI reason tool)
 _QA_REASONING_TEMPLATE = (
     "{agent_persona}"
     "Konteks dari dokumen pengguna:\n"
@@ -116,6 +121,40 @@ def _collection_name(user_id: str) -> str:
     return f"u{user_id.replace('-', '')}"
 
 
+def _is_local_embed(embedding_model: str) -> bool:
+    """Model embedding lokal (dijalankan di mesin ini, bukan lewat gateway)."""
+    return (embedding_model or "").strip().startswith(("local:", "local/"))
+
+
+def _build_embed_model(
+    embedding_model: str,
+    base_url: str,
+    api_key: str,
+    embed_base_url: str | None = None,
+    embed_api_key: str | None = None,
+):
+    """Pilih embedder: lokal (fastembed/ONNX) atau OpenAI-compatible remote.
+
+    `embed_base_url`/`embed_api_key` boleh berbeda dari LLM — embedding
+    remote diarahkan ke penyedianya sendiri (mis. endpoint HF Space),
+    bukan ke gateway LLM.
+    """
+    if _is_local_embed(embedding_model):
+        if FastEmbedEmbedding is None:
+            raise RuntimeError(
+                "llama-index-embeddings-fastembed belum terpasang. "
+                "Jalankan: pip install llama-index-embeddings-fastembed fastembed"
+            )
+        model_name = (embedding_model or "").split(":", 1)[-1].split("/", 1)[-1]
+        model_name = model_name or "all-MiniLM-L6-v2"
+        return FastEmbedEmbedding(model_name=f"sentence-transformers/{model_name}")
+    return OpenAIEmbedding(
+        model_name=embedding_model,
+        api_base=embed_base_url or base_url,
+        api_key=embed_api_key or api_key,
+    )
+
+
 def _get_chroma_client() -> chromadb.PersistentClient:
     chroma_path = Path(settings.CHROMA_DIR)
     chroma_path.mkdir(parents=True, exist_ok=True)
@@ -133,17 +172,15 @@ def _index_document_sync(
     chunk_overlap: int = 64,
 ) -> None:
     """Parsing, chunking, embedding, dan simpan ke ChromaDB (sync, dijalankan di thread)."""
-    embed_model = OpenAIEmbedding(
-        model_name=embedding_model,
-        api_base=base_url,
-        api_key=api_key,
-    )
+    embed_model = _build_embed_model(embedding_model, base_url, api_key)
 
     documents = SimpleDirectoryReader(input_files=[file_path]).load_data()
 
-    # Tambahkan metadata agar bisa difilter per dokumen
+    # Tambahkan metadata agar bisa difilter per dokumen. Nama "doc_id" sengaja
+    # TIDAK dipakai karena llama-index/Chroma memakainya untuk ref_doc_id
+    # internal node dan akan menimpa nilai kita saat insert.
     for doc in documents:
-        doc.metadata["doc_id"] = doc_id
+        doc.metadata["source_doc_id"] = doc_id
         doc.metadata["user_id"] = user_id
 
     # Ukuran potongan diambil dari Pengaturan > Pusat Pengetahuan. Overlap
@@ -221,6 +258,8 @@ def _query_sync(
     enable_reasoning: bool = False,
     enable_rtk: bool = False,
     top_k: int = 5,
+    embedding_base_url: str | None = None,
+    embedding_api_key: str | None = None,
 ) -> dict:
     """Sync RAG query — dijalankan di thread pool."""
     llm = LlamaOpenAI(
@@ -229,10 +268,8 @@ def _query_sync(
         api_key=api_key,
         temperature=0.1,
     )
-    embed_model = OpenAIEmbedding(
-        model_name=embedding_model,
-        api_base=base_url,
-        api_key=api_key,
+    embed_model = _build_embed_model(
+        embedding_model, base_url, api_key, embedding_base_url, embedding_api_key
     )
 
     client = _get_chroma_client()
@@ -249,7 +286,7 @@ def _query_sync(
         from llama_index.core.vector_stores import MetadataFilter, MetadataFilters, FilterOperator, FilterCondition
         filters = MetadataFilters(
             filters=[
-                MetadataFilter(key="doc_id", value=doc_id, operator=FilterOperator.EQ)
+                MetadataFilter(key="source_doc_id", value=doc_id, operator=FilterOperator.EQ)
                 for doc_id in document_ids
             ],
             condition=FilterCondition.OR,
@@ -311,11 +348,15 @@ async def query_documents(
     enable_reasoning: bool = False,
     enable_rtk: bool = False,
     top_k: int = 5,
+    embedding_base_url: str | None = None,
+    embedding_api_key: str | None = None,
 ) -> dict:
     """Async wrapper untuk RAG query."""
     return await asyncio.to_thread(
         _query_sync,
-        user_id, query, base_url, api_key, model_name, embedding_model, document_ids, agent_system_prompt, enable_reasoning, enable_rtk, top_k,
+        user_id, query, base_url, api_key, model_name, embedding_model, document_ids,
+        agent_system_prompt, enable_reasoning, enable_rtk, top_k,
+        embedding_base_url, embedding_api_key,
     )
 
 
@@ -431,6 +472,8 @@ def _quiz_context_from_index(
     api_key: str,
     embedding_model: str,
     top_k: int = 12,
+    embedding_base_url: str | None = None,
+    embedding_api_key: str | None = None,
 ) -> str:
     """Ambil potongan dokumen paling relevan sebagai bahan soal."""
     from llama_index.core.vector_stores import (
@@ -440,7 +483,9 @@ def _quiz_context_from_index(
         MetadataFilters,
     )
 
-    embed_model = OpenAIEmbedding(model_name=embedding_model, api_base=base_url, api_key=api_key)
+    embed_model = _build_embed_model(
+        embedding_model, base_url, api_key, embedding_base_url, embedding_api_key
+    )
     client = _get_chroma_client()
     collection = client.get_or_create_collection(_collection_name(user_id))
     vector_store = ChromaVectorStore(chroma_collection=collection)
@@ -450,7 +495,7 @@ def _quiz_context_from_index(
     )
 
     filters = MetadataFilters(
-        filters=[MetadataFilter(key="doc_id", value=document_id, operator=FilterOperator.EQ)],
+        filters=[MetadataFilter(key="source_doc_id", value=document_id, operator=FilterOperator.EQ)],
         condition=FilterCondition.AND,
     )
     retriever = index.as_retriever(similarity_top_k=max(1, top_k), filters=filters)
@@ -473,18 +518,19 @@ def _generate_quiz_sync(
     model_name: str,
     embedding_model: str,
     top_k: int = 12,
+    embedding_base_url: str | None = None,
+    embedding_api_key: str | None = None,
 ) -> list[dict]:
     """Sync generate quiz — dijalankan di thread pool.
 
     `document_id` boleh None: kuis lalu dibuat dari pengetahuan umum model
     sehingga user tetap bisa berlatih walau belum mengunggah materi apa pun.
     """
-    llm = LlamaOpenAI(
-        model=model_name,
-        api_base=base_url,
-        api_key=api_key,
-        temperature=0.3,  # sedikit kreativitas untuk membuat soal
-    )
+    # Gunakan OpenAI SDK langsung (bukan LlamaOpenAI) agar nama model dari
+    # gateway/kustom tidak divalidasi terhadap daftar model OpenAI resmi.
+    from openai import OpenAI as SyncOpenAI
+
+    llm_client = SyncOpenAI(api_key=api_key or "dummy", base_url=base_url, timeout=180.0)
 
     context = ""
     if document_id:
@@ -496,6 +542,8 @@ def _generate_quiz_sync(
             api_key=api_key,
             embedding_model=embedding_model,
             top_k=top_k,
+            embedding_base_url=embedding_base_url,
+            embedding_api_key=embedding_api_key,
         )
         if not context:
             raise ValueError(
@@ -515,7 +563,17 @@ def _generate_quiz_sync(
         text = prompt if attempt == 0 else (
             prompt + "\n\nPENTING: balasan sebelumnya tidak valid. Keluarkan HANYA array JSON, tanpa kalimat pembuka."
         )
-        last_raw = str(llm.complete(text)).strip()
+        try:
+            resp = llm_client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "user", "content": text}],
+                temperature=0.3,
+            )
+            msg = resp.choices[0].message
+            last_raw = str(msg.content or msg.reasoning_content or "").strip()
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Gagal memanggil model AI untuk kuis: %s", exc)
+            raise ValueError(f"Gagal memanggil model AI untuk generate soal: {exc}")
         items = _extract_json_array(last_raw)
         if items:
             questions = _normalize_questions(items, num_questions)
@@ -539,11 +597,14 @@ async def generate_quiz(
     model_name: str,
     embedding_model: str,
     top_k: int = 12,
+    embedding_base_url: str | None = None,
+    embedding_api_key: str | None = None,
 ) -> list[dict]:
     """Async wrapper untuk generate quiz."""
     return await asyncio.to_thread(
         _generate_quiz_sync,
         user_id, document_id, topic, num_questions,
         base_url, api_key, model_name, embedding_model, top_k,
+        embedding_base_url, embedding_api_key,
     )
 

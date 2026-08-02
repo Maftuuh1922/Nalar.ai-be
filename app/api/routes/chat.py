@@ -6,21 +6,21 @@ from typing import AsyncGenerator
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from openai import AsyncOpenAI
 
 from app.api.deps import get_current_user
-from app.core.encryption import decrypt_api_key
 from app.db.session import get_db
 from app.models.chat_history import ChatHistory
 from app.models.document import Document
-from app.models.model_config import ModelConfig
 from app.models.user import User
 from app.models.chat_session import ChatSession
 from app.schemas.chat import ChatHistoryItem, ChatRequest, ChatResponse, Source
-from app.schemas.chat_session import ChatSessionResponse, ChatSessionCreate
+from app.schemas.chat_session import ChatSessionCreate
 from app.services.agentic_chat import run_agentic_chat_stream
+from app.services.capability_settings import get_capability_block
+from app.services.model_selection import ModelSelectionError, resolve_llm
 from app.services.preferences import build_http_client, get_preferences
 from pydantic import BaseModel
 
@@ -37,18 +37,19 @@ async def chat(
     db: AsyncSession = Depends(get_db),
 ) -> ChatResponse:
     """Tanya-jawab berbasis dokumen menggunakan RAG."""
-    # Cek konfigurasi model AI
-    model_cfg = await db.scalar(
-        select(ModelConfig).where(
-            ModelConfig.user_id == current_user.id,
-            ModelConfig.is_active == True
+    # Model mengikuti llm_selection kalau dikirim; kalau tidak, profil/model
+    # aktif di Pengaturan yang dipakai.
+    try:
+        llm = await resolve_llm(
+            db,
+            current_user.id,
+            payload.llm_selection.model_dump() if payload.llm_selection else None,
         )
-    )
-    if model_cfg is None:
+    except ModelSelectionError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Tidak ada konfigurasi model AI yang aktif. Silakan atur dan aktifkan konfigurasi di halaman Pengaturan.",
-        )
+            detail=str(exc),
+        ) from exc
 
     # Setelan dari Pengaturan > Percakapan & Jaringan
     prefs = await get_preferences(db, current_user.id)
@@ -64,20 +65,22 @@ async def chat(
 
     # Handle session
     session_id = payload.session_id
-    if not session_id:
-        title = payload.message[:50] + ("..." if len(payload.message) > 50 else "")
-        new_session = ChatSession(
-            user_id=current_user.id,
-            title=title,
-        )
-        db.add(new_session)
-        await db.flush()
-        session_id = new_session.id
-    else:
-        from sqlalchemy import func as sql_func
-        sess = await db.scalar(select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == current_user.id))
-        if not sess:
-            raise HTTPException(status_code=404, detail="Sesi chat tidak ditemukan")
+    if not payload.ephemeral:
+        if not session_id:
+            title = payload.message[:50] + ("..." if len(payload.message) > 50 else "")
+            new_session = ChatSession(
+                user_id=current_user.id,
+                title=title,
+                notebook_id=payload.notebook_id,
+            )
+            db.add(new_session)
+            await db.flush()
+            session_id = new_session.id
+        else:
+            from sqlalchemy import func as sql_func
+            sess = await db.scalar(select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == current_user.id))
+            if not sess:
+                raise HTTPException(status_code=404, detail="Sesi chat tidak ditemukan")
 
     # Load history for the session (limit to last 20 messages to save context)
     chat_history_list = []
@@ -104,15 +107,16 @@ async def chat(
                 chat_history_list.append({"role": record.role, "content": record.content})
 
     # Simpan pesan user ke history
-    user_msg = ChatHistory(
-        user_id=current_user.id,
-        session_id=session_id,
-        role="user",
-        content=payload.message,
-        images_json=json.dumps(payload.images) if payload.images else None
-    )
-    db.add(user_msg)
-    await db.flush()
+    if not payload.ephemeral:
+        user_msg = ChatHistory(
+            user_id=current_user.id,
+            session_id=session_id,
+            role="user",
+            content=payload.message,
+            images_json=json.dumps(payload.images) if payload.images else None
+        )
+        db.add(user_msg)
+        await db.flush()
 
     # Ambil system_prompt dari agent jika disediakan
     agent_system_prompt: str | None = None
@@ -123,9 +127,15 @@ async def chat(
         )
         if agent:
             agent_system_prompt = agent.system_prompt
+            
+    if payload.custom_system_instruction:
+        if agent_system_prompt:
+            agent_system_prompt += "\n\n" + payload.custom_system_instruction
+        else:
+            agent_system_prompt = payload.custom_system_instruction
 
     # Jalankan RAG query
-    api_key = decrypt_api_key(model_cfg.api_key_encrypted)
+    api_key = llm.api_key
     document_ids = [str(d) for d in payload.document_ids] if payload.document_ids is not None else None
 
     # Ambil semua dokumen user jika document_ids tidak dispesifikasikan secara khusus
@@ -142,7 +152,7 @@ async def chat(
     proxy_client = build_http_client(prefs)
     client = AsyncOpenAI(
         api_key=api_key or "dummy",
-        base_url=model_cfg.base_url,
+        base_url=llm.base_url,
         timeout=float(prefs.request_timeout),
         http_client=proxy_client,
     )
@@ -168,12 +178,20 @@ async def chat(
             logging.error(f"Error fetching docs for context: {e}")
 
     async def stream_generator() -> AsyncGenerator[str, None]:
+        # Kirim ID sesi ke client di awal stream agar bisa di-reuse
+        if not payload.ephemeral:
+            yield json.dumps({"event": "session_created", "data": str(session_id)}) + "\n"
+
         full_text = ""
         final_usage = None
         try:
+            # Setelan capability "chat" (Pengaturan > Capabilities) menimpa
+            # temperature dari preferensi lama.
+            chat_cap = await get_capability_block(db, current_user.id, "chat")
+            chat_temperature = float(chat_cap.get("temperature", prefs.chat_temperature))
             async for chunk in run_agentic_chat_stream(
                 client=client,
-                model_name=model_cfg.model_name,
+                model_name=llm.model_name,
                 user_message=payload.message,
                 user_images=payload.images,
                 agent_system_prompt=agent_system_prompt,
@@ -182,11 +200,12 @@ async def chat(
                 chat_history=chat_history_list,
                 enable_rtk=payload.enable_rtk,
                 max_tokens=prefs.chat_max_tokens,
-                temperature=prefs.chat_temperature,
+                temperature=chat_temperature,
                 enable_web_tools=prefs.enable_web_tools,
                 enable_document_tools=prefs.enable_document_tools,
                 custom_instructions=prefs.custom_instructions,
                 retrieval_top_k=prefs.retrieval_top_k,
+                capability_tier=llm.capability_tier,
             ):
                 # Try to parse the chunk to accumulate text
                 try:
@@ -204,7 +223,7 @@ async def chat(
                 try:
                     sugg_prompt = f"Berdasarkan jawaban ini:\n\n{full_text[:1500]}\n\nBerikan HANYA 3 saran pertanyaan singkat lanjutan dalam format JSON array string. Contoh: [\"Apa itu X?\", \"Bagaimana cara Y?\", \"Jelaskan Z\"]"
                     sugg_response = await client.chat.completions.create(
-                        model=model_cfg.model_name,
+                        model=llm.model_name,
                         messages=[{"role": "user", "content": sugg_prompt}],
                         temperature=0.7,
                         max_tokens=150
@@ -224,15 +243,16 @@ async def chat(
             yield json.dumps({"event": "error", "data": f"Gagal menghubungi model AI: {exc}"}) + "\n"
         finally:
             # Simpan jawaban AI ke history
-            ai_msg = ChatHistory(
-                user_id=current_user.id,
-                session_id=session_id,
-                role="assistant",
-                content=full_text,
-                usage_json=json.dumps(final_usage) if final_usage else None
-            )
-            db.add(ai_msg)
-            await db.commit()
+            if not payload.ephemeral:
+                ai_msg = ChatHistory(
+                    user_id=current_user.id,
+                    session_id=session_id,
+                    role="assistant",
+                    content=full_text,
+                    usage_json=json.dumps(final_usage) if final_usage else None
+                )
+                db.add(ai_msg)
+                await db.commit()
             if proxy_client is not None:
                 await proxy_client.aclose()
 
@@ -246,37 +266,41 @@ async def get_chat_suggestions(
     db: AsyncSession = Depends(get_db),
 ):
     """Mendapatkan 3 saran pertanyaan berdasarkan percakapan terakhir."""
-    model_cfg = await db.scalar(
-        select(ModelConfig).where(
-            ModelConfig.user_id == current_user.id,
-            ModelConfig.is_active == True
-        )
-    )
-    if not model_cfg:
+    try:
+        llm = await resolve_llm(db, current_user.id)
+    except ModelSelectionError:
         return []
 
     prefs = await get_preferences(db, current_user.id)
     if not prefs.enable_suggestions:
         return []
 
-    # Get last assistant message
+    # Get last assistant message — pindai pesan terbaru (user bisa saja sudah
+    # mengetik pertanyaan baru setelah jawaban asisten, jadi yang terbaru
+    # bukan jaminan berperan assistant).
     history_records = await db.scalars(
         select(ChatHistory)
         .where(ChatHistory.session_id == session_id)
         .order_by(ChatHistory.created_at.desc())
-        .limit(2)
+        .limit(10)
     )
     history = list(history_records.all())
-    if not history or history[0].role != "assistant":
+    last_assistant_msg = ""
+    for record in history:
+        content = (record.content or "").strip()
+        if record.role == "assistant" and content:
+            last_assistant_msg = content
+            break
+    if not last_assistant_msg:
         return []
 
     last_assistant_msg = history[0].content
 
-    api_key = decrypt_api_key(model_cfg.api_key_encrypted)
+    api_key = llm.api_key
     proxy_client = build_http_client(prefs)
     client = AsyncOpenAI(
         api_key=api_key or "dummy",
-        base_url=model_cfg.base_url,
+        base_url=llm.base_url,
         timeout=float(prefs.request_timeout),
         http_client=proxy_client,
     )
@@ -285,7 +309,7 @@ async def get_chat_suggestions(
 
     try:
         response = await client.chat.completions.create(
-            model=model_cfg.model_name,
+            model=llm.model_name,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=150
@@ -309,32 +333,65 @@ async def get_chat_suggestions(
 
 
 
-@router.get("/sessions", response_model=list[ChatSessionResponse])
+async def _session_summary(db: AsyncSession, sess: ChatSession) -> dict:
+    """Bangun objek ringkasan sesi sesuai kontrak ``SessionSummary`` frontend.
+
+    Frontend membaca ``session_id`` (bukan ``id``), ``message_count``,
+    ``last_message``, dan timestamp dalam epoch DETIK (lihat
+    ``lib/relative-time.ts`` yang memakai ``timestamp * 1000``).
+    """
+    last = await db.scalar(
+        select(ChatHistory)
+        .where(ChatHistory.session_id == sess.id, ChatHistory.user_id == sess.user_id)
+        .order_by(ChatHistory.created_at.desc())
+        .limit(1)
+    )
+    msg_count = await db.scalar(
+        select(func.count(ChatHistory.id)).where(
+            ChatHistory.session_id == sess.id,
+            ChatHistory.user_id == sess.user_id,
+        )
+    )
+    return {
+        "id": str(sess.id),
+        "session_id": str(sess.id),
+        "title": sess.title,
+        "created_at": int(sess.created_at.timestamp()) if sess.created_at else 0,
+        "updated_at": int(sess.updated_at.timestamp()) if sess.updated_at else 0,
+        "message_count": msg_count or 0,
+        "last_message": last.content if last else "",
+        "status": "idle",
+        "preferences": {},
+    }
+
+
+@router.get("/sessions")
 async def get_chat_sessions(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> list[ChatSession]:
-    """Ambil semua riwayat sesi chat user."""
+):
+    """Ambil ringkasan semua sesi chat user (urut dari terbaru)."""
     result = await db.scalars(
         select(ChatSession)
         .where(ChatSession.user_id == current_user.id)
         .order_by(ChatSession.updated_at.desc())
     )
-    return list(result.all())
+    sessions = list(result.all())
+    return [await _session_summary(db, sess) for sess in sessions]
 
 
 class ChatSessionUpdate(BaseModel):
     title: str
 
 
-@router.put("/sessions/{session_id}", response_model=ChatSessionResponse)
+@router.put("/sessions/{session_id}")
 async def rename_chat_session(
     session_id: uuid.UUID,
     payload: ChatSessionUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> ChatSession:
-    """Ubah judul sebuah sesi chat."""
+):
+    """Ubah judul sebuah sesi chat; kembalikan ringkasan yang sama dengan daftar."""
     sess = await db.scalar(
         select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == current_user.id)
     )
@@ -343,7 +400,7 @@ async def rename_chat_session(
     sess.title = payload.title.strip()[:255] or sess.title
     await db.commit()
     await db.refresh(sess)
-    return sess
+    return await _session_summary(db, sess)
 
 
 @router.delete("/sessions/{session_id}")
@@ -358,9 +415,60 @@ async def delete_chat_session(
     )
     if not sess:
         raise HTTPException(status_code=404, detail="Sesi chat tidak ditemukan")
+    # Hapus pesan-pesannya dulu secara eksplisit — SQLite tidak selalu
+    # menjalankan ON DELETE CASCADE (foreign_keys default off).
+    from app.models.chat_history import ChatHistory
+
+    await db.execute(
+        ChatHistory.__table__.delete().where(ChatHistory.session_id == session_id)
+    )
     await db.delete(sess)
     await db.commit()
-    return {"status": "ok"}
+    return {"deleted": True}
+
+
+@router.get("/sessions/{session_id}")
+async def get_session_detail(
+    session_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Ambil detail sesi beserta riwayat pesannya."""
+    sess = await db.scalar(
+        select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == current_user.id)
+    )
+    if not sess:
+        raise HTTPException(status_code=404, detail="Sesi chat tidak ditemukan")
+
+    history_records = await db.scalars(
+        select(ChatHistory)
+        .where(ChatHistory.user_id == current_user.id, ChatHistory.session_id == session_id)
+        .order_by(ChatHistory.created_at.asc())
+        .limit(100)
+    )
+    
+    messages = []
+    for h in history_records.all():
+        messages.append({
+            "id": str(h.id),
+            "session_id": str(h.session_id),
+            "role": h.role,
+            "content": h.content,
+            "created_at": int(h.created_at.timestamp() * 1000) if h.created_at else 0,
+            "events": [],
+            "attachments": []
+        })
+
+    return {
+        "id": str(sess.id),
+        "session_id": str(sess.id),
+        "title": sess.title,
+        "created_at": int(sess.created_at.timestamp() * 1000) if sess.created_at else 0,
+        "updated_at": int(sess.updated_at.timestamp() * 1000) if sess.updated_at else 0,
+        "status": "idle",
+        "messages": messages
+    }
+
 
 
 @router.get("/sessions/{session_id}/history", response_model=list[ChatHistoryItem])
