@@ -1,8 +1,13 @@
 """Konfigurasi aplikasi, dibaca dari environment variable (atau file .env)."""
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Direktori proyek (Nalar.ai-be) — basis untuk path absolut, tidak bergantung
+# pada working directory proses (reloader/spawn uvicorn bisa beda cwd).
+_PROJECT_DIR = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
@@ -10,7 +15,7 @@ class Settings(BaseSettings):
 
     # Identitas aplikasi
     APP_NAME: str = "Nalar AI API"
-    API_PREFIX: str = "/api"
+    API_PREFIX: str = "/api/v1"
 
     # Database
     DATABASE_URL: str = "sqlite+aiosqlite:///nalar_ai.db"
@@ -26,6 +31,17 @@ class Settings(BaseSettings):
     # Direktori penyimpanan file upload dan ChromaDB (relatif terhadap working directory)
     UPLOAD_DIR: str = "uploads"
     CHROMA_DIR: str = "chroma_db"
+
+    @property
+    def upload_dir_abs(self) -> Path:
+        """Path absolut UPLOAD_DIR (anti-cwd-spawn bug)."""
+        p = Path(self.UPLOAD_DIR)
+        return p if p.is_absolute() else _PROJECT_DIR / p
+
+    @property
+    def chroma_dir_abs(self) -> Path:
+        p = Path(self.CHROMA_DIR)
+        return p if p.is_absolute() else _PROJECT_DIR / p
 
     @property
     def cors_origins_list(self) -> list[str]:

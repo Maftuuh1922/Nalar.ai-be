@@ -1,0 +1,29 @@
+% Template kampus ULBI untuk ekspor Pandoc (PRD v2.8 §4.2).
+% Aturan tampilan: margin atas 4, bawah 3, kiri 4, kanan 3 cm; Times New
+% Roman 12pt; spasi 1,5. Konten disuntikkan Pandoc di $body$.
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{ragged2e}
+\usepackage[top=4cm,bottom=3cm,left=4cm,right=3cm]{geometry}
+\usepackage{setspace}
+\usepackage{parskip}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,urlcolor=blue,linkcolor=black,citecolor=black}
+\onehalfspacing
+\setlength{\parskip}{0.5em}
+\graphicspath{{}}
+\begin{document}
+$if(title)$
+\begin{center}
+{\LARGE\textbf{$title$}}
+\end{center}
+$endif$
+$body$
+\end{document}

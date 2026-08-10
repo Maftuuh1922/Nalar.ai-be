@@ -27,6 +27,7 @@ class AgentResponse(BaseModel):
     role: str
     system_prompt: str
     avatar_icon: str
+    is_builtin: bool = False
     created_at: datetime
     updated_at: datetime
 

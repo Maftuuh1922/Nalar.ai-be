@@ -12,6 +12,7 @@ class ChatSessionResponse(BaseModel):
     id: UUID
     user_id: UUID
     title: str
+    notebook_id: UUID | None = None
     created_at: datetime
     updated_at: datetime
 

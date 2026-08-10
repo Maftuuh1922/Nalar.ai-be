@@ -31,6 +31,11 @@ class ModelConfigRequest(BaseModel):
         max_length=50,
         description="Jenis penyedia: openai-compatible / google / anthropic / ollama",
     )
+    capability_tier: str = Field(
+        default="tidak_didukung",
+        max_length=50,
+        description="Tingkat kemampuan agenik dari hasil verifikasi 3 tahap",
+    )
     context_window: int = Field(default=65536, ge=1024, le=10_000_000, description="Perkiraan jendela konteks (token)")
 
     @field_validator("capabilities")
@@ -54,6 +59,7 @@ class ModelConfigResponse(BaseModel):
     is_active: bool
     capabilities: list[str] = Field(default_factory=lambda: ["text"])
     provider_type: str = "openai-compatible"
+    capability_tier: str = "tidak_didukung"
     context_window: int = 65536
     created_at: datetime
     updated_at: datetime
@@ -102,6 +108,7 @@ class DetectResponse(BaseModel):
     reachable: bool
     capabilities: list[str]
     provider_type: str
+    capability_tier: str
     context_window: int
     available_models: list[str] = Field(default_factory=list)
     probes: list[ProbeResult] = Field(default_factory=list)

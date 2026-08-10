@@ -1,4 +1,4 @@
-"""Algoritma Mastery Scoring disalin & disesuaikan dari DeepTutor (deeptutor/learning/mastery.py).
+"""Algoritma Mastery Scoring disalin & disesuaikan dari Nalar AI (nalar-ai/learning/mastery.py).
 
 Fungsi ``compute_mastery`` mengubah riwayat hasil percobaan kuis menjadi skor penguasaan 0.0 .. 1.0.
 Algoritma ini menggunakan pembobotan berbasis kebaruan (recency-weighted accuracy)

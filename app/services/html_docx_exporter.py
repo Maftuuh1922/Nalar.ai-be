@@ -310,5 +310,9 @@ def html_to_docx(html: str, output_path: str, title: str | None = None) -> str:
 
     _render_children(document, root)
 
+    # Word (OOXML) requires that a document ends with a paragraph (<w:p>) before <w:sectPr>.
+    # If the HTML ends with a table or list, Word will consider the DOCX corrupted.
+    document.add_paragraph()
+
     document.save(output_path)
     return output_path

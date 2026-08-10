@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.db.base import Base
 
 # Import semua model supaya terdaftar di Base.metadata (dibutuhkan autogenerate)
-from app.models import user, model_config, document, chat_history  # noqa: F401
+from app.models import user, model_config, document, chat_history, quiz, chat_session, quiz_attempt, agent, notebook, research_report, user_preference, memory, knowledge_base, question_bank, skill  # noqa: F401
 
 config = context.config
 

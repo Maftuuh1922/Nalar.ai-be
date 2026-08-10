@@ -13,3 +13,15 @@ chroma_db/
 uploads/
 .venv/
 venv/
+.hermes/
+
+# Log & artefak debug lokal
+*.log
+*.err.log
+cookies.txt
+nul
+.ss_token
+
+# Basis data lokal (file sampingan SQLite)
+*.db-shm
+*.db-wal

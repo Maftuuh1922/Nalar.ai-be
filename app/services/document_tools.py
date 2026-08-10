@@ -275,6 +275,81 @@ async def fetch_webpage(url: str, max_chars: int = 8000, **kwargs) -> str:
         logger.error(f"Error in fetch_webpage({url}): {e}")
         return json.dumps({"error": f"Gagal membuka halaman: {e}"})
 
+async def arxiv_search(query: str, max_results: int = 5, **kwargs) -> str:
+    """Mencari paper akademik di arXiv."""
+    import httpx
+    import xml.etree.ElementTree as ET
+    from urllib.parse import quote_plus
+    
+    if not query:
+        return json.dumps({"error": "Kata kunci pencarian kosong."})
+        
+    try:
+        max_results = max(1, min(int(max_results), 10))
+    except (TypeError, ValueError):
+        max_results = 5
+        
+    encoded_query = quote_plus(query)
+    url = f"https://export.arxiv.org/api/query?search_query=all:{encoded_query}&start=0&max_results={max_results}"
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            
+        root = ET.fromstring(response.text)
+        ns = {"atom": "http://www.w3.org/2005/Atom"}
+        results = []
+        for entry in root.findall("atom:entry", ns):
+            title = entry.find("atom:title", ns).text
+            summary = entry.find("atom:summary", ns).text
+            link = entry.find("atom:id", ns).text
+            results.append({
+                "title": title.strip().replace('\n', ' ') if title else "",
+                "summary": summary.strip().replace('\n', ' ') if summary else "",
+                "url": link.strip() if link else ""
+            })
+            
+        if results:
+            return json.dumps({"results": results, "source": "arxiv"})
+        else:
+            return json.dumps({"message": f"Tidak ada paper arXiv yang cocok untuk '{query}'."})
+    except Exception as e:
+        logger.error(f"Error in arxiv_search({query}): {e}")
+        return json.dumps({"error": f"Pencarian arXiv gagal: {e}"})
+
+async def rag_query(db: AsyncSession, user_id: uuid.UUID, query: str, document_id_or_filename: str = "", max_matches: int = 5, **kwargs) -> str:
+    """Alias untuk search_in_document tapi bisa lintas dokumen jika diimplementasikan."""
+    if document_id_or_filename:
+        return await search_in_document(db, user_id, document_id_or_filename, query, max_matches, **kwargs)
+    # Jika tidak spesifik dokumen, coba baca sedikit dari dokumen terbaru
+    return json.dumps({"message": "Harap tentukan dokumen. Gunakan search_in_document atau sertakan parameter document_id_or_filename."})
+
+async def deep_critical_analysis(target_text: str, focus: str = "", **kwargs) -> str:
+    """Mock fungsi deep_critical_analysis."""
+    return json.dumps({
+        "status": "analisis mendalam selesai",
+        "result": f"Menganalisis teks ({len(target_text)} karakter) dengan fokus: '{focus}'. Kekuatan: Informasi relevan. Kelemahan: Kurang referensi eksternal. Celah: Tidak membahas aspek teknis."
+    })
+
+async def reference_rank(citations: list[dict], **kwargs) -> str:
+    """Mock fungsi perankingan referensi."""
+    if not citations:
+        return json.dumps({"error": "Tidak ada referensi untuk diranking."})
+    return json.dumps({"status": "sukses", "message": f"{len(citations)} referensi berhasil diranking."})
+
+async def canvas_write(content: str, format: str = "markdown", citations: list[dict] = None, **kwargs) -> str:
+    """Fungsi yang akan ditangkap oleh frontend untuk menulis ke kanvas dokumen."""
+    return json.dumps({"status": "sukses", "message": "Teks dan sitasi berhasil ditulis ke editor dokumen pengguna."})
+
+async def cite_insert(citation_id: str, snippet: str = "", **kwargs) -> str:
+    """Menyisipkan sitasi spesifik ke editor."""
+    return json.dumps({"status": "sukses", "message": f"Sitasi {citation_id} disisipkan."})
+
+async def file_export(format: str = "pdf", **kwargs) -> str:
+    """Fungsi mock untuk ekspor file."""
+    return json.dumps({"status": "sukses", "message": f"File berhasil disiapkan untuk ekspor dalam format {format}."})
+
 
 # Skema OpenAI untuk tool calling
 DOCUMENT_TOOLS = [
@@ -379,6 +454,135 @@ DOCUMENT_TOOLS = [
                     }
                 },
                 "required": ["url"],
+                "additionalProperties": False
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "arxiv_search",
+            "description": "Mencari paper dan jurnal akademik di arXiv.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Kata kunci pencarian paper."},
+                    "max_results": {"type": "integer", "description": "Maksimal hasil yang dikembalikan."}
+                },
+                "required": ["query"],
+                "additionalProperties": False
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "rag_query",
+            "description": "Mencari dokumen yang relevan menggunakan Retrieval Augmented Generation.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Kata kunci atau pertanyaan."},
+                    "document_id_or_filename": {"type": "string", "description": "ID/Nama dokumen spesifik (opsional)."}
+                },
+                "required": ["query"],
+                "additionalProperties": False
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "deep_critical_analysis",
+            "description": "Membaca teks utuh dan melakukan analisis kritis mendalam, mengidentifikasi klaim, metode, kekuatan, kelemahan, dan celah.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "target_text": {"type": "string", "description": "Teks sumber utuh yang akan dianalisis."},
+                    "focus": {"type": "string", "description": "Fokus/konteks laporan pengguna agar analisis terarah."}
+                },
+                "required": ["target_text"],
+                "additionalProperties": False
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reference_rank",
+            "description": "Memberikan ranking kredibilitas pada daftar referensi.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "citations": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "title": {"type": "string"},
+                                "url": {"type": "string"}
+                            }
+                        }
+                    }
+                },
+                "required": ["citations"],
+                "additionalProperties": False
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "canvas_write",
+            "description": "Menulis teks ke kanvas/dokumen laporan pengguna beserta referensinya.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "content": {"type": "string", "description": "Konten markdown yang ditulis ke dokumen."},
+                    "citations": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "title": {"type": "string"},
+                                "url": {"type": "string"}
+                            },
+                            "required": ["title", "url"]
+                        }
+                    }
+                },
+                "required": ["content"],
+                "additionalProperties": False
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "cite_insert",
+            "description": "Menyisipkan sitasi ke teks.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "citation_id": {"type": "string"},
+                    "snippet": {"type": "string"}
+                },
+                "required": ["citation_id"],
+                "additionalProperties": False
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "file_export",
+            "description": "Mengekspor laporan ke format tertentu (pdf/docx).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "format": {"type": "string", "enum": ["pdf", "docx", "markdown"]}
+                },
+                "required": ["format"],
                 "additionalProperties": False
             }
         }

@@ -16,6 +16,8 @@ class PreferenceResponse(BaseModel):
     chunk_size: int
     chunk_overlap: int
     retrieval_top_k: int
+    document_parsing_engine: str = "text_only"
+    rag_engine: str = "llamaindex"
 
     request_timeout: int
     proxy_url: str | None = None
@@ -41,6 +43,8 @@ class PreferenceUpdate(BaseModel):
     chunk_size: int | None = Field(default=None, ge=128, le=4000)
     chunk_overlap: int | None = Field(default=None, ge=0, le=1000)
     retrieval_top_k: int | None = Field(default=None, ge=1, le=30)
+    document_parsing_engine: str | None = None
+    rag_engine: str | None = None
 
     request_timeout: int | None = Field(default=None, ge=10, le=900)
     proxy_url: str | None = Field(default=None, max_length=500)

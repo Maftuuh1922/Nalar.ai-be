@@ -1,0 +1,4640 @@
+### b4dc3341fa954df893820bdd82b154d1
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{geometry}
+\usepackage{setspace}
+\usepackage{hyperref}
+% Margin template kampus: atas 4 / bawah 3 / kiri 4 / kanan 3 cm — sama dengan
+% chromium_pdf.MARGIN dan docx_template_exporter, supaya ketiga jalur ekspor
+% (PDF LaTeX, PDF Chromium, DOCX) menghasilkan tata letak yang seragam.
+\geometry{a4paper,top=4cm,bottom=3cm,left=4cm,right=3cm}
+\onehalfspacing
+\title{}
+\date{}
+\begin{document}
+
+\begin{center}
+\textbf{\large NALAR AI: PENGEMBANGAN RUANG KERJA PENULISAN}
+\textbf{\large JURNAL BERBANTUAN AI DENGAN AGENTIC WRITING, SITASI MULTI-FORMAT, DAN EKSPOR TYPESET LATEX}
+\textbf{\large LAPORAN TUGAS AKHIR}
+Diajukan untuk memenuhi kelulusan matakuliah Tugas Akhir pada Program Studi DIII Teknik Informatika
+
+Disusun Oleh :
+
+Nama : MUHAMMAD MAFTUH
+
+NPM
+
+: 613230021
+
+\includegraphics[width=0.51\textwidth]{http://localhost:8087/uploads/b4dc3341-fa95-4df8-9382-0bdd82b154d1/images/img_001.png}
+\textbf{\large PROGRAM DIPLOMA III TEKNIK INFORMATIKA}
+\textbf{\large SEKOLAH TEKNOLOGI INFORMASI}
+\textbf{\large UNIVERSITAS LOGISTIK DAN BISNIS INTERNASIONAL}
+\textbf{\large BANDUNG 2026}
+\end{center}
+\newpage
+\subsection*{LEMBAR PENGESAHAN DOSEN PEMBIMBING}
+\subsection*{NALAR AI: PENGEMBANGAN RUANG KERJA PENULISAN}
+\subsection*{JURNAL BERBANTUAN AI DENGAN AGENTIC WRITING, SITASI MULTI-FORMAT, DAN EKSPOR TYPESET LATEX}
+\subsection*{TUGAS AKHIR}
+Laporan Tugas Akhir ini telah diperiksa, disetujui dan disidangkan
+
+Di Bandung, ........................2026
+
+Oleh:
+
+Pembimbing Utama
+
+Pembimbing Pendamping
+
+Widia Resdiana, S.S., M.Pd.
+
+Muhammad Ruslan Maulani, S.Kom., M.T.
+
+NIDN. ..................
+
+NIDN. ..................
+
+Mengetahui,
+
+Ketua Program Studi DIII Teknik Informatika
+
+(....................................)
+
+NIDN. ........................
+
+i
+
+\subsection*{LEMBAR PENGESAHAN DOSEN PENGUJI}
+\subsection*{NALAR AI: PENGEMBANGAN RUANG KERJA PENULISAN}
+\subsection*{JURNAL BERBANTUAN AI DENGAN AGENTIC WRITING, SITASI MULTI-FORMAT, DAN EKSPOR TYPESET LATEX}
+\subsection*{TUGAS AKHIR}
+Laporan Tugas Akhir ini telah diuji dan dipertahankan di depan Dewan Penguji
+
+Pada Sidang Tugas Akhir Tanggal ........................2026
+
+Di Bandung
+
+Penguji I
+
+Penguji II
+
+(.... . ... . ... . ... ........... .........)
+
+(....................................)
+
+NIDN. .. ... ...................
+
+NIDN. ........................
+
+ii
+
+\subsection*{SURAT PERNYATAAN}
+Dengan ini saya menyatakan bahwa:
+
+\begin{enumerate}
+\item Tugas Akhir ini adalah asli dan belum pernah diajukan untuk mendapatkan gelar akademik, baik di Universitas Logistik dan Bisnis Internasional maupun perguruan tinggi lainnya.
+\item Tugas Akhir ini murni merupakan karya penelitian saya sendiri dan tidak menjiplak karya pihak lain. Dalam hal ada bantuan atau arahan dari pihak lain maka telah saya sebutkan identitas dan jenis bantuannya di dalam lembar ucapan terima kasih / kata pengantar.
+\item Seandainya ada karya pihak lain yang ternyata memiliki kemiripan dengan karya saya ini, maka hal ini adalah di luar pengetahuan saya dan terjadi tanpa kesengajaan dari pihak saya.
+\end{enumerate}
+Pernyataan ini saya buat dengan sesungguhnya dan apabila di kemudian ha- ri terbukti adanya kebohongan dalam pernyataan ini, maka saya bersedia menerima sanksi akademik sesuai norma yang berlaku di Universitas Logistik dan Bisnis In- ternasional.
+
+Bandung, ........................2026
+
+MUHAMMAD MAFTUH
+
+NPM. 613230021 iii
+
+\subsection*{HALAMAN PERSEMBAHAN}
+Tugas Akhir ini saya persembahkan kepada:
+
+Orang tua dan keluarga tercinta atas doa, kasih sayang, dan dukungan yang tiada henti.
+
+Serta seluruh rekan seperjuangan DIII Teknik Informatika ULBI.
+
+iv
+
+\subsection*{PEDOMAN PENGGUNAAN TUGAS AKHIR}
+Tugas Akhir DIII yang tidak dipublikasikan, terdaftar di Perpustakaan Uni- versitas Logistik dan Bisnis Internasional, dan terbuka untuk umum dengan keten- tuan bahwa hak cipta ada pada pengarang. Referensi kepustakaan diperkenankan dicatat, tetapi pengutipan atau peringkasan hanya dapat dilakukan seizin pengarang dan harus disertai dengan kebiasaan ilmiah untuk menyebutkan sumbernya.
+
+Memperbanyak atau menerbitkan sebagian atau seluruh isi Tugas Akhir ha- ruslah seizin dari Rektor Universitas Logistik dan Bisnis Internasional.
+
+Perpustakaan yang meminjam Tugas Akhir ini untuk keperluan anggotanya harus mengisi nama dan tanda tangan peminjam serta tanggal pinjam.
+
+Sitasi pustaka untuk Tugas Akhir ini dapat dituliskan sebagai berikut:
+
+Maftuh, M. (2026). Nalar AI: Pengembangan Ruang Kerja Penulisan
+
+Jurnal Berbantuan AI dengan Agentic Writing, Sitasi Multi-Format, dan Ekspor Typeset LATEX. Laporan Tugas Akhir, Program Studi DIII
+
+Teknik Informatika, Sekolah Teknologi Informasi, Universitas Logistik dan Bisnis Internasional, Bandung.
+
+v
+
+\subsection*{KATA PENGANTAR}
+Puji syukur penulis panjatkan ke hadirat Allah SWT, karena atas rahmat dan karunia-Nya penulis dapat menyelesaikan Laporan Tugas Akhir yang berjudul ""Na- lar AI: Pengembangan Ruang Kerja Penulisan Jurnal Berbantuan AI dengan
+
+Agentic Writing, Sitasi Multi-Format, dan Ekspor Typeset LATEX"" tepat pada waktunya. Penulisan Laporan Tugas Akhir ini dilakukan guna memenuhi salah satu syarat kelulusan dalam meraih gelar Ahli Madya (A.Md.) pada Program Studi DIII
+
+Teknik Informatika, Sekolah Teknologi Informasi, Universitas Logistik dan Bisnis
+
+Internasional (ULBI) Bandung.
+
+Sistem Nalar AI dirancang sebagai ruang kerja penulisan jurnal berbantuan
+
+AI yang memadukan tiga mekanisme: manajemen referensi jurnal dengan unggah- an berkas PDF dan ekstraksi metadata otomatis memakai Large Language Model
+
+(LLM), agentic writing pada modul Co-Writer yang membaca seluruh referensi grup laporan dan isi draf untuk menyusun bab utuh beserta sitasi {[}n{]}, serta pratinjau rapi ala LATEX dan ekspor berkualitas ke LATEX, PDF, dan DOCX yang memperta- hankan struktur heading, tabel, gambar, dan daftar pustaka.
+
+Dalam penyusunan Tugas Akhir ini, penulis mendapatkan dorongan, bim- bingan, serta bantuan dari berbagai pihak. Oleh karena itu, penulis ingin menyam- paikan rasa terima kasih dan penghargaan yang sebesar-besarnya kepada:
+
+\begin{enumerate}
+\item Bapak Muhammad Ruslan Maulani, S.Kom., M.T., selaku Dosen Pembim- bing Utama yang telah memberikan arahan teknis, koreksi mendalam, dan wawasan berharga selama proses penelitian.
+\item Ibu Widia Resdiana, S.S., M.Pd., selaku Dosen Pembimbing Pendamping yang telah memberikan masukan dari segi tata bahasa, struktur laporan, dan sistematika penulisan akademis.
+\item Seluruh Dosen dan Staf Pengajar Program Studi DIII Teknik Informatika Se- kolah Teknologi Informasi ULBI yang telah mendidik dan memberikan ilmu pengetahuan selama masa studi.
+\item Kedua Orang Tua dan Keluarga tercinta yang senantiasa memberikan doa, motivasi, moral, serta dukungan ﬁnansial yang tidak terhingga.
+\item Rekan-rekan mahasiswa DIII Teknik Informatika angkatan 2023 yang telah berbagi semangat, bantuan teknis, dan kerja sama selama perkuliahan.
+\end{enumerate}
+vi
+
+Penulis menyadari bahwa Laporan Tugas Akhir ini masih jauh dari kesem- purnaan. Oleh karena itu, penulis sangat mengharapkan kritik dan saran yang mem- bangun dari para pembaca demi perbaikan di masa mendatang. Akhir kata, semoga laporan ini dapat memberikan manfaat akademis maupun praktis bagi pengembang- an teknologi sistem pembelajaran cerdas.
+
+Bandung, ........................2026
+
+Muhammad Maftuh
+
+NPM. 613230021 vii
+
+\subsection*{NALAR AI: PENGEMBANGAN RUANG KERJA PENULISAN}
+\subsection*{JURNAL BERBANTUAN AI DENGAN AGENTIC WRITING, SITASI MULTI-FORMAT, DAN EKSPOR TYPESET LATEX}
+ABSTRAK
+
+Penulisan laporan penelitian dan artikel jurnal pada pendidikan tinggi masih ba- nyak dilakukan secara manual dan terpisah-pisah: referensi dibaca pada aplikasi pembaca dokumen, draf ditulis pada pengolah kata, sitasi dan daftar pustaka disu- sun dengan mengetik ulang metadata secara manual, dan bantuan AI yang tersedia umum tidak membaca isi dokumen referensi milik penulis sehingga jawabannya ti- dak dapat dirujuk balik. Penelitian ini mengembangkan Nalar AI, sebuah ruang kerja penulisan jurnal berbantuan AI yang memadukan tiga komponen: (1) mana- jemen referensi jurnal berupa unggahan berkas PDF (maksimal 25 MB), ekstraksi metadata otomatis (judul, penulis, tahun, jurnal, DOI) memakai Large Language
+
+Model (LLM) yang dijalankan sebagai tugas latar, pengelompokan per grup lapor- an, dan pembangkit sitasi dalam tujuh format baku (IEEE, APA, MLA, Chicago,
+
+Harvard, Vancouver, SNI) sebagai fungsi murni Python tanpa pemanggilan LLM;
+
+(2) agentic writing pada modul Co-Writer yang membaca seluruh referensi grup laporan aktif dan keseluruhan isi draf untuk menyusun bab utuh dengan penanda sitasi {[}n{]} yang ditambatkan ke daftar pustaka, dengan konﬁrmasi sebelum diterapk- an; serta (3) pratinjau rapi ala LaTeX dan ekspor berkualitas ke LATEX (.tex), PDF
+
+(dikompilasi dengan tectonic), dan DOCX dengan tautan DOI aktif yang mem- pertahankan struktur heading, tabel, gambar, dan daftar pustaka.
+
+Arsitektur sistem dibangun memakai FastAPI dan SQLAlchemy asinkron pada backend dengan basis data SQLite, serta Next.js dan React pada frontend.
+
+Berkas referensi diurai memakai PyMuPDF untuk PDF, sedangkan impor laporan ke Co-Writer menerima berkas .md, .txt, .docx, dan .pdf (maksimal 10 MB) dengan python-docx, termasuk ekstraksi gambar ke direktori media. Generator sitasi diimplementasikan sebagai fungsi deterministik sehingga pembangkitan ber- jalan instan dan konsisten antarmetode. Fitur pendukung yang turut diimplementa- sikan adalah daftar isi otomatis dari heading H1-H3, penyisipan sitasi cepat melalui trigger {[}{[}, analisis kesenjangan struktur terhadap delapan bagian baku artikel ilmi- ah, serta deteksi kalimat klaim tanpa sitasi berbasis pencocokan pola. Checkpoint versi dokumen tersedia pada sisi peladen dan belum memiliki antarmuka riwayat versi pada sisi klien.
+
+Pengujian fungsionalitas black box atas empat belas kasus uji inti (ung- gah PDF jurnal, impor laporan, ekstraksi metadata, generator sitasi tujuh format, penyimpanan sitasi, pencarian jurnal, agentic writing, ekspor LATEX/PDF/DOCX, quick-cite, checkpoint, pemeriksaan struktur, pemeriksaan sitasi, dan pratinjau rapi) seluruhnya berhasil sesuai harapan; uji otomatis pytest lulus 34 dari 34 kasus pada sisi backend dan tsc -noEmit tanpa galat pada sisi frontend. Penelitian menyimpulkan bahwa penggabungan manajemen referensi, penulisan agentic, sita- viii si multi-format, dan ekspor berkualitas dalam satu ruang kerja menghasilkan asisten penulisan jurnal yang menuntaskan alur dari pengumpulan referensi hingga berkas siap kumpul.
+
+Kata Kunci: Retrieval-Augmented Generation, Agentic AI, Agentic Writing, Sis- tem Sitasi, Typesetting, LATEX, Nalar AI.
+
+\subsection*{NALAR AI: PENGEMBANGAN RUANG KERJA PENULISAN}
+\subsection*{JURNAL BERBANTUAN AI DENGAN AGENTIC WRITING, SITASI MULTI-FORMAT, DAN EKSPOR TYPESET LATEX}
+ABSTRACT
+
+Writing research reports and journal articles in higher education is still largely do- ne manually and in a fragmented way: references are read in document readers, drafts are written in word processors, citations and bibliographies are assembled by retyping metadata by hand, and commonly available AI assistants do not read the author's own reference documents, so their answers cannot be traced back to a source. This research develops Nalar AI, an AI-assisted journal writing workspace that combines three components: (1) journal reference management for uploading
+
+PDF ﬁles (up to 25 MB), automatic metadata extraction (title, authors, year, jour- nal, DOI) using a Large Language Model (LLM) executed as a background task, grouping by report, and a citation generator supporting seven standard formats (IE-
+
+EE, APA, MLA, Chicago, Harvard, Vancouver, SNI) implemented as pure Python functions without any LLM call; (2) agentic writing in the Co-Writer module that reads all references of the active report group and the entire current draft to produ- ce complete chapters with citation markers {[}n{]} anchored to the bibliography, with conﬁrmation before applying; and (3) LaTeX-style typeset preview and high-quality export to LaTeX (.tex), PDF (compiled with tectonic), and DOCX with active
+
+DOI hyperlinks, preserving the structure of headings, tables, ﬁgures, and bibliogra- phies.
+
+The system architecture is built with FastAPI and asynchronous SQLAlche- my on the backend using a SQLite database, and Next.js with React on the fron- tend. Reference ﬁles are parsed with PyMuPDF, while report import into Co-Writer accepts .md, .txt, .docx, and .pdf ﬁles (up to 10 MB) using python-docx, including image extraction to a media directory. The citation generator is imple- mented as a deterministic function so generation is instant and consistent across styles. Supporting features also implemented include an automatic table of con- tents from H1-H3 headings, quick citation insertion via the {[}{[} trigger, structure gap analysis against eight standard sections of a scientiﬁc article, and pattern-based detection of claim sentences without citations. Document version checkpoints are available on the server side and do not yet have a version-history interface on the client side.
+
+ix
+
+Black-box functional testing of fourteen core test cases (journal PDF uplo- ad, report import, metadata extraction, seven-format citation generation, citation sa- ving, journal search, agentic writing, LaTeX/PDF/DOCX export, quick-cite, chec- kpoints, structure checking, citation checking, and typeset preview) all passed as expected; automated pytest tests passed 34 of 34 cases on the backend and tsc
+
+-noEmit reported no errors on the frontend. The research concludes that combi-
+
+ning reference management, agentic writing, multi-format citation, and high-quality export in a single workspace yields a journal-writing assistant that completes the workﬂow from reference collection to a submission-ready document.
+
+Keywords: Retrieval-Augmented Generation, Agentic AI, Agentic Writing, Cita- tion System, Typesetting, LaTeX, Nalar AI.
+
+x
+
+\subsection*{DAFTAR ISI}
+DAFTAR TABEL . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . xiii
+
+DAFTAR GAMBAR . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . xiv
+
+DAFTAR NOTASI
+
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+xv
+
+Bab 1
+
+PENDAHULUAN . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+1
+
+1.1
+
+Latar Belakang . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+1
+
+1.2
+
+Rumusan Masalah . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+2
+
+1.3
+
+Tujuan Penelitian
+
+. . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+2
+
+1.4
+
+Batasan Masalah . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+3
+
+1.5
+
+Sistematika Penulisan . . . . . . . . . . . . . . . . . . . . . . . . .
+
+3
+
+Bab 2
+
+TINJAUAN PUSTAKA . . . . . . . . . . . . . . . . . . . . . . . .
+
+4
+
+2.1
+
+Kajian Pustaka . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+4
+
+2.2
+
+Large Language Model dan Arsitektur Transformer
+
+. . . . . . . . .
+
+6
+
+2.3
+
+Retrieval-Augmented Generation (RAG) . . . . . . . . . . . . . . .
+
+6
+
+2.4
+
+Agentic AI dan Pemanggilan Perkakas (Tool Calling) . . . . . . . .
+
+6
+
+2.5
+
+Sistem Sitasi Akademik dan Format Referensi . . . . . . . . . . . .
+
+7
+
+2.6
+
+Typesetting dan Format LATEX . . . . . . . . . . . . . . . . . . . . .
+
+7
+
+2.7
+
+Landasan Perangkat Lunak dan Teknologi
+
+. . . . . . . . . . . . . .
+
+7
+
+2.8
+
+Pengujian Perangkat Lunak . . . . . . . . . . . . . . . . . . . . . .
+
+8
+
+Bab 3
+
+ANALISA DAN PERANCANGAN
+
+. . . . . . . . . . . . . . . . .
+
+9
+
+3.1
+
+Analisis Sistem
+
+. . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+9
+
+Analisis Sistem Berjalan (Current System) . . . . . . . . . . . .
+
+3.1.1
+
+9
+
+3.1.2
+
+Analisis Sistem yang akan Dibangun . . . . . . . . . . . . . . .
+
+9
+
+3.1.3
+
+Analisis Kebutuhan Sistem . . . . . . . . . . . . . . . . . . . .
+
+10
+
+3.1.4
+
+Pemodelan Sistem
+
+. . . . . . . . . . . . . . . . . . . . . . . .
+
+12
+
+3.2
+
+Perancangan Sistem . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+16
+
+Entity Relationship Diagram (ERD) . . . . . . . . . . . . . . .
+
+3.2.1
+
+16
+
+3.2.2
+
+Kamus Data . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+17
+
+3.2.3
+
+Perancangan Algoritma . . . . . . . . . . . . . . . . . . . . . .
+
+18
+
+Perancangan Antar Muka (User Interface) . . . . . . . . . . . .
+
+3.2.4
+
+20
+
+Bab 4
+
+IMPLEMENTASI DAN PENGUJIAN . . . . . . . . . . . . . . . .
+
+21
+
+4.1
+
+Implementasi . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+21
+
+4.1.1
+
+Lingkungan Implementasi
+
+. . . . . . . . . . . . . . . . . . . .
+
+21
+
+4.1.2
+
+Implementasi Modul Manajemen Referensi . . . . . . . . . . .
+
+22 xi
+
+4.1.3
+
+Implementasi Modul Co-Writer
+
+. . . . . . . . . . . . . . . . .
+
+23
+
+4.1.4
+
+Implementasi Pratinjau Rapi dan Pemeriksaan Draf . . . . . . .
+
+25
+
+4.1.5
+
+Implementasi Agentic Write dan Ekspor . . . . . . . . . . . . .
+
+27
+
+4.1.6
+
+Implementasi Halaman Pendukung . . . . . . . . . . . . . . . .
+
+28
+
+4.2
+
+Pengujian
+
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+30
+
+4.2.1
+
+Lingkungan Pengujian
+
+. . . . . . . . . . . . . . . . . . . . . .
+
+30
+
+4.2.2
+
+Hasil Pengujian . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+30
+
+4.2.3
+
+Perbaikan Cacat yang Ditemukan Saat Pengujian . . . . . . . .
+
+32
+
+Bab 5
+
+PENUTUP . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+33
+
+5.1
+
+Kesimpulan
+
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+33
+
+5.2
+
+Keterbatasan Sistem . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+34
+
+5.3
+
+Saran . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+34
+
+DAFTAR PUSTAKA . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+36
+
+LAMPIRAN A: KODE SUMBER MODUL INTI . . . . . . . . . . . . . . .
+
+38 xii
+
+\subsection*{DAFTAR TABEL}
+Tabel 2-1
+
+Matriks Perbandingan Penelitian Terdahulu dan Nalar AI . . . .
+
+5
+
+Tabel 3-1
+
+Kebutuhan Fungsional Sistem
+
+. . . . . . . . . . . . . . . . . .
+
+11
+
+Tabel 3-2
+
+Use Case: Agentic Write . . . . . . . . . . . . . . . . . . . . .
+
+15
+
+Tabel 3-3
+
+Use Case: Ekspor Dokumen
+
+. . . . . . . . . . . . . . . . . . .
+
+16
+
+Kamus Data journal\_references . . . . . . . . . . . . .
+
+Tabel 3-4
+
+18
+
+Tabel 4-1
+
+Hasil Pengujian Fungsional . . . . . . . . . . . . . . . . . . . .
+
+31 xiii
+
+\subsection*{DAFTAR GAMBAR}
+Use Case Diagram Sistem Nalar AI
+
+Gambar 3-1
+
+. . . . . . . . . . . . . .
+
+12
+
+Sequence Diagram Agentic Write . . . . . . . . . . . . . . . .
+
+Gambar 3-2
+
+13
+
+Sequence Diagram Ekspor Dokumen . . . . . . . . . . . . . .
+
+Gambar 3-3
+
+14
+
+Activity Diagram Unggah Referensi dan Ekstraksi Metadata . .
+
+Gambar 3-4
+
+15
+
+Entity Relationship Diagram Sistem Nalar AI
+
+Gambar 3-5
+
+. . . . . . . . .
+
+17
+
+Gambar 4-1
+
+Arsitektur Penerapan Sistem Nalar AI
+
+. . . . . . . . . . . . .
+
+22
+
+Gambar 4-2
+
+Halaman Referensi Jurnal . . . . . . . . . . . . . . . . . . . .
+
+23
+
+Gambar 4-3
+
+Halaman Co-Writer (Daftar Dokumen) . . . . . . . . . . . . .
+
+24
+
+Gambar 4-4
+
+Editor Co-Writer Tiga Kolom . . . . . . . . . . . . . . . . . .
+
+24
+
+Gambar 4-5
+
+Daftar Isi Otomatis dari Heading Dokumen . . . . . . . . . . .
+
+25
+
+Pratinjau Rapi (Typeset Preview) . . . . . . . . . . . . . . . .
+
+Gambar 4-6
+
+25
+
+Gambar 4-7
+
+Hasil Pemeriksaan Kelengkapan Struktur . . . . . . . . . . . .
+
+26
+
+Gambar 4-8
+
+Hasil Pemeriksaan Sitasi dan Konsistensi Istilah . . . . . . . .
+
+27
+
+Gambar 4-9
+
+Panel Agentic Write . . . . . . . . . . . . . . . . . . . . . . .
+
+28
+
+Gambar 4-10 Dashboard Nalar AI . . . . . . . . . . . . . . . . . . . . . . .
+
+29
+
+Gambar 4-11 Learning Space
+
+. . . . . . . . . . . . . . . . . . . . . . . . .
+
+29
+
+Gambar 4-12 Halaman Pengaturan Model LLM . . . . . . . . . . . . . . . .
+
+30 xiv
+
+\subsection*{DAFTAR NOTASI A. Daftar Notasi Diagram}
+Notasi berikut dipakai pada diagram use case, sequence, activity, dan ERD di Bab
+
+3 serta diagram arsitektur di Bab 4.
+
+Notasi
+
+Nama
+
+Keterangan
+
+Use case
+
+Satu fungsi sistem yang dapat dijalankan aktor
+
+Aktor, komponen, atau
+
+Pihak atau modul yang berinte- lifeline raksi dengan sistem
+
+Aksi (activity)
+
+Satu langkah pemrosesan pada diagram aktivitas
+
+Putusan (decision)
+
+Percabangan bersyarat dengan keluaran ya/tidak tabel
+
+Entitas
+
+Tabel basis data beserta daftar kolom kolomnya
+
+Panah utuh
+
+Aliran kendali, pesan permin- taan, atau relasi ON DELETE
+
+CASCADE
+
+Pesan balasan, relasi include,
+
+Panah putus-putus atau ON DELETE SET NULL
+
+Garis hayat (lifeline)
+
+Rentang waktu hidup objek pa- da diagram sequence
+
+1 ...N
+
+Kardinalitas satu ke ba-
+
+Satu baris induk memiliki nol nyak atau lebih baris anak
+
+0 ...N
+
+Kardinalitas opsional
+
+Relasi boleh kosong (kolom kunci asing bernilai NULL)
+
+{[}n{]}
+
+Penanda sitasi
+
+Nomor rujukan pada draf; no- mornya divalidasi sistem dan tertambat ke daftar pustaka xv
+
+\subsection*{B. Daftar Singkatan}
+Singkatan
+
+Kepanjangan
+
+Artiﬁcial Intelligence
+
+AI
+
+Large Language Model
+
+LLM
+
+Retrieval-Augmented Generation
+
+RAG
+
+Portable Document Format
+
+PDF
+
+Microsoft Word Open XML Document
+
+DOCX
+
+Digital Object Identiﬁer
+
+DOI
+
+Institute of Electrical and Electronics Engineers
+
+IEEE
+
+American Psychological Association
+
+APA
+
+Modern Language Association
+
+MLA
+
+Standar Nasional Indonesia
+
+SNI
+
+User Interface
+
+UI
+
+Uniﬁed Modeling Language
+
+UML
+
+Entity Relationship Diagram
+
+ERD
+
+Structured Query Language
+
+SQL
+
+Application Programming Interface
+
+API
+
+Representational State Transfer
+
+REST
+
+Server-Sent Events
+
+SSE
+
+JavaScript Object Notation
+
+JSON
+
+Universally Unique Identiﬁer
+
+UUID
+
+Foreign Key (kunci asing)
+
+FK
+
+Optical Character Recognition
+
+OCR
+
+Table of Contents
+
+TOC xvi
+
+\subsection*{Bab 1 PENDAHULUAN 1.1 Latar Belakang}
+Penulisan laporan penelitian dan artikel jurnal pada pendidikan tinggi saat ini masih banyak dilakukan secara manual dan terpisah-pisah. Mahasiswa maupun peneliti dihadapkan pada serangkaian perkakas yang tidak saling terhubung: pem- baca dokumen untuk mempelajari referensi, aplikasi pengolah kata untuk menulis draf, mesin pencari untuk menemukan pustaka, serta perangkat terpisah untuk me- nyusun daftar pustaka dan memformat sitasi. Alur yang terpecah tersebut memakan waktu dan rawan inkonsistensi, terutama pada tahap penyusunan sitasi dan daftar pustaka yang memiliki banyak format baku (IEEE, APA, MLA, Chicago, Harvard,
+
+Vancouver, SNI) {[}8, 10{]}.
+
+Pertumbuhan Large Language Model (LLM) berbasis arsitektur Transfor- mer {[}3{]} membuka peluang mengotomatisasi sebagian besar pekerjaan tersebut. Na- mun LLM yang dipakai berdiri sendiri memiliki keterbatasan berupa halusinasi, yaitu keluaran yang terbaca meyakinkan tetapi tidak tertambat pada sumber acuan
+
+{[}7{]}. Pada konteks penulisan akademik, halusinasi berbahaya: penulis yang menyi- tasi rujukan ﬁktif dapat merusak kredibilitas karya tanpa menyadarinya.
+
+Pendekatan Retrieval-Augmented Generation (RAG) menjawab keterba- tasan tersebut dengan menyisipkan potongan dokumen hasil pencarian ke dalam prompt sebelum LLM menyusun jawaban, sehingga keluaran tertambat pada sum- ber yang dapat dirujuk balik {[}1{]}. Perkembangan RAG diklasiﬁkasikan menjadi Na- ive RAG, Advanced RAG, dan Modular RAG {[}2{]}. Pada konteks penulisan jurnal,
+
+RAG dipakai untuk membuat asisten yang membaca seluruh referensi yang diung- gah pengguna (PDF jurnal, DOCX laporan) lalu menjawab pertanyaan disertai ru- jukan {[}8, 9{]}.
+
+Selain RAG, paradigma agentic AI memberi model kemampuan menyelang- seling penalaran dan aksi (reasoning-acting loop), memilih perkakas yang perlu dipanggil, membaca hasilnya, lalu memutuskan langkah berikutnya sampai tugas dianggap selesai {[}4, 5, 6{]}. Dalam penulisan jurnal, perilaku agenik ini diwujudk- an sebagai agentic writing: pengguna memberi perintah menulis satu bab, sistem membaca seluruh referensi pada grup laporan aktif, membaca keseluruhan isi do- kumen yang sedang dikerjakan, lalu menyusun draf beserta sitasi otomatis {[}12{]}.
+
+Berdasarkan uraian tersebut, penelitian ini mengembangkan Nalar AI, se-
+
+1
+
+2 buah ruang kerja penulisan jurnal berbantuan AI dengan empat fokus utama: (1) manajemen referensi jurnal berupa unggahan berkas PDF, ekstraksi metadata oto- matis, pengelompokan per laporan, dan pembangkitan sitasi dalam tujuh format baku; (2) assistant penulisan pada modul Co-Writer yang menyatukan editor mar- kdown, pratinjau rapi ala LATEX, panel percakapan riset, dan jendela referensi dalam satu layar; (3) agentic writing yang membaca seluruh materi referensi dan isi draf untuk menghasilkan bab utuh dengan sitasi tertanam; serta (4) ekspor berkualitas ke LATEX, PDF, dan DOCX dengan pemformatan heading, gambar, tabel, dan daftar pustaka yang terjaga.
+
+\subsection*{1.2 Rumusan Masalah}
+Berdasarkan latar belakang di atas, rumusan masalah pada penelitian ini adalah sebagai berikut:
+
+\begin{enumerate}
+\item Bagaimana merancang dan membangun sistem manajemen referensi jurnal yang mampu menerima unggahan berkas PDF, mengekstrak metadata secara otomatis, dan membangkitkan sitasi dalam tujuh format baku akademik?
+\item Bagaimana merancang agentic writing pada Co-Writer yang membaca selu- ruh referensi grup dan keseluruhan isi draf sehingga menghasilkan bab utuh beserta sitasi yang ditambatkan pada daftar pustaka?
+\item Bagaimana merancang pratinjau rapi (typeset preview) ala LATEX dan ekspor berkas PDF/DOCX yang mempertahankan struktur heading, tabel, gambar, dan daftar pustaka?
+\end{enumerate}
+\subsection*{1.3 Tujuan Penelitian}
+Sesuai rumusan masalah, tujuan penelitian ini adalah:
+
+\begin{enumerate}
+\item Membangun sistem manajemen referensi jurnal dengan unggah PDF, ekstrak- si metadata otomatis, pengelompokan per grup laporan, dan pembuatan sitasi tujuh format.
+\item Menerapkan alur agentic writing pada modul Co-Writer yang membaca refe- rensi dan isi draf untuk menuliskan bab beserta sitasi otomatis yang tertambat.
+\item Mewujudkan pratinjau ketikan rapi ala
+\end{enumerate}
+LATEX dan ﬁtur ekspor
+
+(LATEX/PDF/DOCX) yang mempertahankan struktur dan format akade- mik.
+
+3
+
+\subsection*{1.4 Batasan Masalah}
+Batasan masalah penelitian ini adalah sebagai berikut:
+
+\begin{enumerate}
+\item Berkas referensi jurnal yang dapat diunggah dibatasi pada format PDF ber- ukuran maksimal 25 MB; berkas laporan untuk diimpor ke Co-Writer men- dukung format .md, .txt, .docx, dan .pdf berukuran maksimal 10 MB.
+\end{enumerate}
+Berkas hasil pindai (scan) tanpa lapisan teks tidak dapat diekstrak metadata- nya secara otomatis dan harus diisi manual.
+
+\begin{enumerate}
+\item Format sitasi yang dibangkitkan adalah IEEE, APA, MLA, Chicago, Harvard,
+\end{enumerate}
+Vancouver, dan SNI.
+
+\begin{enumerate}
+\item Percakapan riset dan penulisan agenik menggunakan model LLM hasil kon- ﬁgurasi pengguna.
+\item Pengujian difokuskan pada modul autentikasi, manajemen referensi, genera- tor sitasi, Co-Writer (agentic writing, pratinjau rapi, pemeriksaan draf, eks- por), dan integrasi daftar pustaka.
+\item Riset pustaka pendukung dibatasi lima tahun terakhir (2021-2026).
+\end{enumerate}
+\subsection*{1.5 Sistematika Penulisan}
+Sistematika penulisan laporan penelitian ini adalah sebagai berikut:
+
+BAB 1 PENDAHULUAN Memuat latar belakang, rumusan masalah, tujuan, batasan, dan sistematika penulisan.
+
+B 2 TINJAUAN PUSTAKA Mengkaji teori dan penelitian terdahulu, yang meliputi Large Language Mo- del, Retrieval-Augmented Generation, agentic AI, sistem sitasi akademik, dan teknologi pengembangan yang digunakan.
+
+SA DAN PERANCANGAN Memuat analisis sistem berjalan dan sistem yang akan dibangun, analisis ke- butuhan, hingga perancangan basis data, algoritma ekstraksi metadata, algo- ritma generator sitasi, alur agentic writing, dan perancangan antar muka.
+
+ENTASI DAN PENGUJIAN Menjelaskan implementasi setiap modul dan hasil pengujian fungsi-fungsi sistem yang dikembangkan.
+
+BAB 5 PENUTUP Merangkum kesimpulan dan saran pengembangan.
+
+\subsection*{Bab 2 TINJAUAN PUSTAKA 2.1}
+\subsection*{Kajian Pustaka}
+Retrieval-
+
+Penelitian ini berpijak pada tiga rumpun studi terdahulu:
+
+Augmented Generation (RAG) untuk penambatan jawaban pada dokumen, agentic
+
+AI berbasis pemanggilan perkakas (tool calling) untuk otomatisasi penulisan, serta sistem sitasi akademik dan typesetting untuk publikasi ilmiah. Tabel 2-1 menyajik- an perbandingan penelitian relevan dengan pendekatan yang diterapkan pada Nalar
+
+AI.
+
+4
+
+5
+
+Tabel 2-1
+
+Matriks Perbandingan Penelitian Terdahulu dan Nalar AI
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lllll}
+\toprule
+No & Peneliti \& Tahun & Topik / Metode & Hasil Utama & Perbedaan dengan Nalar AI \\
+\midrule
+--- & --- & --- & --- & --- \\
+1 & Lewis et al. (2020) {[}1{]} & Retrieval- Augmented Generation for Knowledge- Intensive NLP Tasks & Penggabungan memori parametrik dan non-parametrik menurunkan halusinasi pada QA & Berfokus pada arsitektur RAG untuk tugas NLP umum; tanpa manajemen referensi akademik \\
+2 & Gao et al. (2023) {[}2{]} & Survei RAG untuk LLM (Naive, Advanced, Modular RAG) & Klasifikasi evolusi arsitektur RAG & Berupa kajian literatur; Nalar AI mengimplementa- sikan RAG modular untuk dokumen jurnal \\
+3 & Yao et al. (2023) {[}4{]} & ReAct: penyelangan penalaran dan aksi pada LLM & Gelung reasoning-acting meningkatkan keandalan tugas multi-langkah & Kerangka umum; Nalar AI menerapkannya pada perkakas dokumen dan penulisan jurnal \\
+4 & Sari \& Wijaya (2022) {[}8{]} & Penerapan RAG untuk chatbot pendidikan & Akurasi jawaban chatbot pendidikan meningkat dengan RAG & Fokus chatbot tanya-jawab; Nalar AI menambahkan generator sitasi dan penulisan agenik \\
+5 & Hidayat \& Nugraha (2023) {[}9{]} & Tanya jawab dokumen dengan RAG dan embedding & Sistem menjawab dengan rujukan dokumen & Tidak memiliki modul penulisan (Co-Writer) maupun ekspor berkas akademik \\
+6 & Rahman \& Kurniawan (2023) {[}10{]} & LLM pada pembelajaran adaptif perguruan tinggi & LLM mempercepat adaptasi materi & Tidak mencakup pipeline sitasi dan ekspor berkualitas publikasi \\
+\bottomrule
+\end{tabular}
+\end{table}
+7
+
+Maulana \&
+
+Sistem agen cerdas
+
+Agen AI
+
+Studi kasus laporan
+
+Puspitasari untuk penulisan membantu proyek; Nalar AI
+
+(2026) {[}12{]} laporan tugas akhir menyusun laporan menambahkan dengan otomatisasi manajemen referensi dan sitasi
+
+6
+
+Berdasarkan Tabel 2-1, kebaruan (novelty) penelitian ini terletak pada pe- nyatuan manajemen referensi jurnal, penulisan agentic yang membaca seluruh ma- teri dan draf, sitasi multi-format otomatis, serta ekspor ke LATEX/PDF/DOCX dalam satu ruang kerja, yang pada studi terdahulu dibahas terpisah.
+
+\subsection*{2.2 Large Language Model dan Arsitektur Transformer}
+Large Language Model (LLM) adalah model jaringan saraf yang dilatih pa- da korpus teks berskala sangat besar untuk mempelajari pola bahasa {[}3{]}. Arsitek- tur Transformer memperkenalkan mekanisme attention yang memungkinkan mo- del menimbang relevansi antarkata dalam kalimat secara paralel, sehingga menjadi fondasi model-model seperti GPT dan LLaMA {[}3{]}. Pada Nalar AI, LLM dipakai se- bagai mesin ekstraksi metadata dokumen, generator sitasi kontekstual, dan penulis draf pada gelung agentic writing. Kapabilitas model dikonﬁgurasi oleh pengguna melalui halaman pengaturan model (endpoint, kunci API, nama model).
+
+\subsection*{2.3 Retrieval-Augmented Generation (RAG)}
+Retrieval-Augmented Generation (RAG) menyisipkan potongan dokumen hasil pencarian ke dalam prompt sebelum LLM menyusun jawaban sehingga kelu- aran tertambat pada sumber yang dapat dirujuk {[}1{]}. Evolusi RAG mencakup Naive
+
+RAG, Advanced RAG, dan Modular RAG, di mana varian modular memungkinkan pencarian dilakukan berulang dan dikendalikan logika aplikasi {[}2{]}. Pada Nalar AI,
+
+RAG dipakai untuk menjawab pertanyaan atas isi referensi jurnal berkas PDF yang diunggah pengguna dengan menambatkan jawaban ke paragraf dokumen asal {[}8, 9{]}.
+
+\subsection*{2.4 Agentic AI dan Pemanggilan Perkakas (Tool Calling)}
+Paradigma agentic AI memberi model kemampuan menyelang-seling pe- nalaran dan aksi (reasoning-acting loop), memilih perkakas yang perlu dipanggil, membaca hasilnya, lalu memutuskan langkah berikutnya secara mandiri sampai tu- gas dianggap selesai {[}4, 5, 6{]}. Pada Nalar AI, perilaku agenik diterapkan pada modul agentic writing: model membaca seluruh referensi grup laporan aktif dan keseluruhan isi draf, lalu menyusun bab utuh dengan penanda sitasi {[}n{]} yang ditam- batkan ke daftar pustaka {[}12{]}.
+
+7
+
+\subsection*{2.5 Sistem Sitasi Akademik dan Format Referensi}
+Sitasi adalah aturan merujuk sumber karya ilmiah yang bertujuan mem- beri penghargaan dan memudahkan penelusuran {[}11{]}. Terdapat beberapa format baku yang umum dipakai: IEEE (nomor berurutan {[}1{]}, {[}2{]}, ...), APA 7th
+
+(penulis-tahun), MLA, Chicago (notes-bibliography), Harvard, Vancouver, dan ga- ya Indonesia (SNI) {[}11, 8{]}. Pembangkitan sitasi secara otomatis menuntut metada- ta lengkap (penulis, tahun, judul, jurnal, volume, nomor, halaman, DOI, penerbit) yang umumnya diekstrak dari halaman judul berkas PDF atau direktori word/ pada
+
+DOCX.
+
+\subsection*{2.6 Typesetting dan Format LATEX}
+Typesetting adalah proses mengatur tipograﬁdokumen agar sesuai standar publikasi, mencakup margin, penomoran bab/sub-bab, penomoran gambar/tabel de- ngan caption, header/footer, dan nomor halaman {[}13{]}. LATEX adalah sistem penyi- apan dokumen berbasis markup yang banyak dipakai untuk makalah ilmiah karena penanganan rumus, tabel, dan bibliograﬁyang rapi {[}13{]}. Pada Nalar AI, pratinjau rapi (typeset preview) merender draf markdown menjadi tampilan ala LATEX dengan penomoran otomatis, dan ekspor berkualitas dilakukan ke LATEX (.tex) ataupun berkas PDF/DOCX yang mempertahankan struktur.
+
+\subsection*{2.7 Landasan Perangkat Lunak dan Teknologi}
+Sistem Nalar AI dikembangkan dengan arsitektur full-stack:
+
+• Frontend: Next.js (React) untuk antarmuka ruang kerja, editor markdown
+
+Co-Writer, panel percakapan riset, panel referensi, dan halaman manajemen jurnal.
+
+• Backend: FastAPI (Python) menyediakan REST API, autentikasi, manaje- men berkas, generator sitasi (fungsi murni Python), serta orkestrasi LLM.
+
+• Basis data: SQLite (melalui SQLAlchemy) untuk tabel pengguna, grup la- poran, referensi jurnal, kategori sitasi, dokumen Co-Writer, dan checkpoint versi.
+
+• Model LLM: Diperoleh dari penyedia OpenAI-compatible yang dikonﬁgu- rasi pengguna (mis. tokenrouter atau gateway lokal) {[}10{]}.
+
+8
+
+• Parsing dokumen: PyMuPDF (fitz) untuk PDF dan python-docx un- tuk DOCX, termasuk ekstraksi gambar dan metadata.
+
+Atas dasar tersebut, pengembangan Nalar AI menjadi asisten penulisan jurnal yang menautkan manajemen referensi, penulisan agenik, dan sitasi dalam satu ruang ker- ja.
+
+\subsection*{2.8 Pengujian Perangkat Lunak}
+Pengujian dilakukan dengan black-box fungsional terhadap setiap modul:
+
+manajemen referensi (unggah, ekstraksi metadata, pengelompokan), generator sita- si tujuh format, agentic writing, pratinjau/ekspor berkas, dan integrasi daftar pus- taka. Selain itu, dilakukan pengecekan statis tsc -noEmit pada frontend dan pytest pada sisi backend untuk menjamin kestabilan ﬁtur yang sudah berjalan.
+
+\subsection*{Bab 3 ANALISA DAN PERANCANGAN}
+\subsection*{3.1 Analisis Sistem}
+\subsection*{Analisis Sistem Berjalan (Current System)}
+\subsection*{3.1.1}
+Penulisan laporan penelitian dan artikel jurnal pada saat ini dijalankan de- ngan rangkaian perkakas yang tidak saling terhubung. Penulis mengunduh berkas referensi berformat PDF atau DOCX, membacanya secara berurutan memakai pem- baca dokumen, lalu menulis draf pada aplikasi pengolah kata. Ketika menyusun si- tasi, penulis harus mengetik format rujukan secara manual sesuai gaya yang diminta
+
+(IEEE, APA, atau lainnya), memeriksa satu per satu kesesuaian penulis, tahun, jur- nal, dan halaman, kemudian menyusun daftar pustaka secara manual di akhir doku- men. Apabila format sitasi berubah (misalnya diminta berganti dari IEEE ke APA), seluruh penomoran dan penataan daftar pustaka harus dikerjakan ulang.
+
+Alur berjalan tersebut menyisakan empat kelemahan yang menjadi dasar perancangan sistem usulan:
+
+\begin{enumerate}
+\item Pengelolaan referensi manual. Metadata jurnal (penulis, tahun, judul, DOI) diketik ulang secara manual setiap kali digunakan, rawan salah ketik dan tidak konsisten.
+\item Sitasi tidak otomatis. Tidak ada pembangkit sitasi otomatis; penulis meng- hafal atau menyalin format dari sumber lain, sehingga format antarrujukan sering tidak seragam.
+\item Penulisan tidak tertambat referensi. Bantuan AI yang tersedia umum (cha- tbot publik) tidak membaca isi dokumen referensi milik penulis, sehingga jawabannya tidak dapat dirujuk balik ke halaman jurnal tertentu.
+\item Ekspor tidak terjaga formatnya. Hasil ketikan di pengolah kata sering be- rantakan saat dikonversi ke format lain; penomoran bab, gambar, dan tabel tidak otomatis.
+\end{enumerate}
+\subsection*{3.1.2 Analisis Sistem yang akan Dibangun}
+Sistem Nalar AI dirancang sebagai ruang kerja penulisan jurnal berbantuan
+
+AI yang menyatukan kebutuhan tersebut ke dalam satu alur tertutup: unggah re-
+
+9
+
+10 ferensi $\rightarrow$ekstraksi metadata $\rightarrow$pengelompokan per laporan $\rightarrow$penulisan di
+
+Co-Writer dengan bantuan agenik $\rightarrow$sitasi otomatis tujuh format $\rightarrow$ekspor
+
+LATEX/PDF/DOCX.
+
+Referensi yang diunggah berupa berkas PDF diurai untuk diekstrak metadata-nya (judul, penulis, tahun, nama jurnal, volume, nomor, halaman, DOI, penerbit) memakai model LLM, lalu disimpan pada grup laporan yang dibuat pengguna (misalnya ""Laporan A"", ""Laporan B""). Generator sitasi menghasilkan rujukan dalam tujuh format baku (IEEE, APA, MLA, Chicago, Harvard, Vancouver,
+
+SNI) secara instan tanpa panggilan LLM, karena seluruh format diturunkan dari metadata yang sama.
+
+Modul Co-Writer menyediakan editor markdown dengan pratinjau rapi ala
+
+LATEX (penomoran bab, gambar, dan tabel otomatis), panel percakapan riset yang membaca seluruh referensi dan isi draf, serta panel kanan berisi tab Referensi (klik untuk menyisipkan sitasi) dan tab Agentic Write (memberi perintah menulis satu bab; AI membaca seluruh referensi grup dan isi dokumen, lalu menghasilkan draf dengan sitasi {[}n{]} yang harus dikonﬁrmasi pengguna sebelum diterapkan). Ekspor dilakukan ke berkas LATEX, PDF (melalui compiler tectonic), dan DOCX dengan tautan DOI aktif, yang mempertahankan struktur heading, tabel, gambar, dan daftar pustaka.
+
+\subsection*{3.1.3 Analisis Kebutuhan Sistem}
+Kebutuhan fungsional sistem dirinci pada Tabel 3-1.
+
+11
+
+Tabel 3-1
+
+Kebutuhan Fungsional Sistem
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\toprule
+Kode & Kebutuhan & Deskripsi \\
+\midrule
+--- & --- & --- \\
+KF- 01 & Unggah referensi & Sistem dapat menerima unggahan berkas PDF beru- kuran maksimal 25 MB, menyimpannya, dan meng- ekstrak metadata secara otomatis (judul, penulis, ta- hun, jurnal, DOI). \\
+KF- 02 & Kelola grup laporan & Pengguna dapat membuat, mengganti nama, dan menghapus grup laporan, serta memindahkan refe- rensi antargrup. \\
+KF- 03 & Generate sitasi & Sistem membangkitkan sitasi dalam tujuh format (IEEE, APA, MLA, Chicago, Harvard, Vancouver, SNI) dari metadata referensi. \\
+KF- 04 & Simpan sitasi & Pengguna dapat menyimpan sitasi pilihan ke katego- ri (mis. ""Sitasi Bab 2"") dan melihatnya kembali di Learning Space. \\
+KF- 05 & Cari jurnal & Sistem mencari jurnal dari internet (web dan arXiv) dan menyimpannya sebagai referensi. \\
+KF- 06 & Co-Writer & Sistem menyediakan editor markdown dengan pra- tinjau rapi, panel percakapan riset, panel referensi, dan daftar isi otomatis. \\
+KF- 07 & Agentic write & Sistem membaca seluruh referensi grup dan isi draf, menuliskan bab sesuai perintah, dan menampilkan draf untuk konfirmasi. \\
+KF- 08 & Quick-cite & Mengetik {[}{[} pada editor memunculkan pencarian referensi untuk menyisipkan sitasi cepat. \\
+KF- 09 & Checkpoint & Sistem menyimpan snapshot dokumen sebelum per- ubahan besar AI dan menyediakan pemulihan versi. \\
+KF- 10 & Ekspor & Sistem mengekspor draf ke LATEX (.tex), PDF, dan DOCX dengan struktur terjaga. \\
+\bottomrule
+\end{tabular}
+\end{table}
+Kebutuhan non-fungsional meliputi:
+
+kecepatan pembangkitan sita- si kurang dari satu detik (fungsi murni Python);
+
+keamanan akses berbasis get\_current\_user sehingga berkas hanya diakses pemiliknya; ketersediaan bahasa antarmuka Indonesia; serta dukungan berkas referensi PDF hingga 25 MB
+
+12 dan berkas impor laporan (.md, .txt, .docx, .pdf) hingga 10 MB.
+
+\subsection*{3.1.4 Pemodelan Sistem}
+Pemodelan sistem menggunakan UML yang terdiri atas use case diagram, sequence diagram, dan activity diagram. Aktor utama adalah Pengguna (penulis jurnal atau laporan) yang berinteraksi langsung dengan seluruh fungsi sistem, se- dangkan Penyedia LLM berperan sebagai aktor sekunder berupa sistem luar yang dipanggil pada fungsi yang memerlukan model bahasa. Perlu dicatat bahwa tidak semua fungsi memanggil LLM: pembangkitan sitasi dan pemeriksaan draf diker- jakan sepenuhnya di dalam sistem.
+
+3.1.4.1 Use Case Diagram
+
+Gambar 3-1 menyajikan use case diagram sistem Nalar AI. Tiga use case yang memerlukan model bahasa dihubungkan ke aktor Penyedia LLM, yaitu eks- traksi metadata, agentic write, dan percakapan riset.
+
+Sistem Nalar AI
+
+Kelola grup laporan
+
+Penyedia
+
+Pengguna
+
+LLM
+
+Unggah referensi PDF
+
+$\ll$include$\gg$
+
+Ekstraksi metadata
+
+Bangkitkan sitasi tujuh format
+
+$\ll$include$\gg$
+
+Tulis draf di Co-Writer
+
+Agentic write
+
+Percakapan riset
+
+Periksa struktur dan sitasi draf
+
+Ekspor LATEX/PDF/DOCX
+
+Use Case Diagram Sistem Nalar AI
+
+Gambar 3-1
+
+13
+
+Deskripsi dua use case inti disajikan pada Tabel 3-2 dan Tabel 3-3.
+
+3.1.4.2 Sequence Diagram Agentic Write
+
+Gambar 3-2 menyajikan sequence diagram untuk use case Agentic Write, disusun mengikuti endpoint POST /co\_writer/agent-write/stream dan fungsi agentic\_write() pada app/services/agentic\_writer.py.
+
+Perhatikan bahwa penggantian penanda sitasi dikerjakan oleh sistem sendiri setelah keluaran LLM diterima, bukan diserahkan kepada LLM.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lllll}
+\toprule
+ &  &  & Penyedia LLM &  \\
+\midrule
+--- & --- & --- & --- & --- \\
+alt {[}grup & tanpa referensi{]} $\rightarrow$422 ""Grup ini be & lum memiliki refer &  &  \\
+ & 5: prompt referensi b &  &  &  \\
+ & 6: draf str dengan pen 7: replace cit \_ validasi {[}n{]} + ge &  &  &  \\
+ &  & ation markers() \textit{ nerate citation() } &  &  \\
+\bottomrule
+\end{tabular}
+\end{table}
+Sequence Diagram Agentic Write
+
+Gambar 3-2
+
+3.1.4.3 Sequence Diagram Ekspor Dokumen
+
+Gambar 3-3 menyajikan sequence diagram ekspor dokumen sesuai endpo- int GET /co\_writer/documents/\{doc\_id\}/export. Ekspor tidak me- manggil LLM sama sekali: seluruh konversi dikerjakan oleh pustaka konversi dan compiler LATEX.
+
+14
+
+Co-Writer
+
+Basis Data tectonic /
+
+FastAPI
+
+Pengguna
+
+(Next.js)
+
+SQLite export python-docx
+
+1: pilih format (tex/pdf/docx)
+
+2: GET export?format=
+
+3: ambil dokumen + DOI referensi
+
+4: isi markdown + peta DOI
+
+5: konversi markdown
+
+(heading, tabel, gambar)
+
+6: berkas hasil
+
+7: FileResponse
+
+8: unduhan berkas
+
+Sequence Diagram Ekspor Dokumen
+
+Gambar 3-3
+
+3.1.4.4 Activity Diagram Unggah dan Ekstraksi Metadata activity diagram
+
+Gambar
+
+3-4 menyajikan unggah re-
+
+POST ferensi beserta ekstraksi metadata di latar, mengikuti
+
+/journal/references run\_extract\_metadata() dan pada app/services/journal\_metadata.py.
+
+Diagram memperlihatkan ti- ga titik keputusan yang benar-benar ada pada kode: validasi ekstensi berkas, validasi ukuran maksimal 25 MB, dan keberhasilan pembacaan teks berkas.
+
+15
+
+Pilih berkas PDF dan grup laporan tidak
+
+Tolak: HTTP 415 ekstensi format tidak didukung
+
+.pdf?
+
+ya tidak ukuran
+
+Tolak: HTTP 413
+
+$\le$25 MB?
+
+berkas terlalu besar ya
+
+Simpan berkas ke uploads/
+
+Buat baris journal\_references status = pending
+
+Jalankan tugas latar status = extracting tidak status = failed teks berkas metadata diisi manual terbaca?
+
+ya
+
+Kirim teks awal ke LLM dan urai JSON metadata
+
+Simpan metadata status = extracted
+
+Activity Diagram Unggah Referensi dan Ekstraksi Metadata
+
+Gambar 3-4
+
+Tabel 3-2
+
+Use Case: Agentic Write
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ll}
+\toprule
+Nama & Agentic Write \\
+\midrule
+--- & --- \\
+Aktor & Pengguna \\
+Prakondisi & Pengguna telah memiliki grup laporan berisi minimal satu refe- rensi dengan metadata lengkap. \\
+Alur utama & (1) Pengguna memilih grup laporan dan menulis perintah (mis. ""tulis Bab 2 Tinjauan Pustaka""); (2) sistem membaca seluruh re- ferensi grup dan isi draf; (3) AI menyusun draf bab dengan sitasi {[}n{]}; (4) sistem menampilkan draf beserta daftar sitasi yang dipa- kai; (5) pengguna memilih Terima, Tolak, atau Edit. \\
+Alur alternatif & Bila grup belum memiliki referensi, sistem menampilkan pesan ""Grup ini belum memiliki referensi jurnal"". \\
+\bottomrule
+\end{tabular}
+\end{table}
+16
+
+Tabel 3-3
+
+Use Case: Ekspor Dokumen
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ll}
+\toprule
+Nama & Ekspor Dokumen \\
+\midrule
+--- & --- \\
+Aktor & Pengguna \\
+Prakondisi & Dokumen Co-Writer memiliki isi. \\
+Alur utama & (1) Pengguna memilih format ekspor (LATEX, PDF, atau DO- CX); (2) sistem mengonversi markdown sesuai format; (3) sis- tem mengunduh berkas hasil; (4) untuk PDF, sistem menjalankan compiler tectonic. \\
+Alur alternatif & Bila isi kosong, sistem menampilkan peringatan ""Add some con- tent before exporting"". \\
+\bottomrule
+\end{tabular}
+\end{table}
+\subsection*{3.2 Perancangan Sistem Entity Relationship Diagram (ERD)}
+\subsection*{3.2.1}
+Sistem memakai basis data relasional SQLite yang diakses melalui
+
+SQLAlchemy async.
+
+Gambar 3-5 menyajikan ERD tujuh tabel inti beserta kardinalitas dan aksi referential integrity sebagaimana dideﬁnisikan pada ber- kas model (app/models/user.py, journal.py, co\_writer.py, dan co\_writer\_checkpoint.py). Seluruh kunci utama bertipe UUID.
+
+17 journal\_references id : UUID users user\_id : UUID (FK) journal\_groups id : UUID group\_id : UUID (FK) username : String(50) unik id : UUID ﬁlename, ﬁle\_path email : String(255) user\_id : UUID (FK)
+
+1 ...N
+
+1 ...N title, authors (JSON), year hashed\_password : String(255) name : String(255) journal\_name, volume, issue full\_name : String(255) description : Text pages, doi, publisher is\_admin : Boolean created\_at : DateTime abstract : Text created\_at : DateTime status : String(20) error\_message : String(1000)
+
+1 ...N saved\_citations citation\_categories id : UUID id : UUID user\_id : UUID (FK) co\_writer\_documents
+
+0 .. .N user\_id : UUID (FK)
+
+1 ...N category\_id : UUID (FK) id : UUID name : String(255) reference\_id : UUID (FK) user\_id : UUID (FK) format : String(30) title : String(255) citation\_text : Text content : Text note : String(1000) created\_at, updated\_at
+
+1 ...N
+
+1 .. .N co\_writer\_checkpoints id : UUID doc\_id : UUID (FK) user\_id : UUID (FK) label : String(255) content\_snapshot : Text
+
+Entity Relationship Diagram Sistem Nalar AI
+
+Gambar 3-5 users
+
+ON DELETE CASCADE,
+
+Seluruh relasi ke memakai aksi
+
+$\rightarrow$ journal\_groups journal\_references, demikian pula relasi citation\_categories $\rightarrow$saved\_citations, dan co\_writer\_documents
+
+$\rightarrow$co\_writer\_checkpoints, sehingga penghapusan induk otomatis mem- bersihkan barisan anaknya. Pengecualiannya adalah kolom reference\_id pada saved\_citations yang memakai ON DELETE SET NULL (digambarkan dengan garis putus-putus): sitasi yang sudah disimpan tetap ada meskipun berkas referensi asalnya dihapus, karena teks sitasinya sudah tersimpan pada kolom citation\_text.
+
+\subsection*{3.2.2 Kamus Data}
+Kamus data ringkas untuk tabel inti journal\_references disajikan pada Tabel 3-4.
+
+18
+
+Kamus Data journal\_references
+
+Tabel 3-4
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\toprule
+Field & Tipe & Keterangan \\
+\midrule
+--- & --- & --- \\
+id & UUID & Kunci utama \\
+user id \_ & UUID & Pemilik referensi (FK users) \\
+group id \_ & UUID & Grup laporan (FK journal groups) \_ \\
+filename & String(500) & Nama berkas asli \\
+file path \_ & String(1000) & Lokasi penyimpanan berkas \\
+title & String(1000) & Judul artikel \\
+authors & JSON & Daftar penulis \\
+year & Integer & Tahun terbit \\
+journal name \_ & String(1000) & Nama jurnal \\
+volume, issue, pages & String & Volume, nomor, halaman \\
+doi & String(500) & DOI artikel \\
+publisher & String(500) & Penerbit \\
+abstract & Text & Abstrak \\
+status & String(20) & pending / extracting / extracted / failed \\
+\bottomrule
+\end{tabular}
+\end{table}
+\subsection*{3.2.3 Perancangan Algoritma}
+Bagian ini menguraikan rancangan algoritma inti sistem: ekstraksi metada- ta, generator sitasi, agentic writing, pembangkit daftar pustaka, ekspor LATEX/PDF, dan pratinjau rapi.
+
+3.2.3.1 Algoritma Ekstraksi Metadata
+
+Ekstraksi metadata dijalankan sebagai tugas latar setelah berkas referensi tersimpan. Alur perancangannya:
+
+\begin{enumerate}
+\item Berkas dibaca sesuai format: PDF memakai PyMuPDF (fitz), DOCX me- makai python-docx.
+\item Teks awal (halaman pertama PDF atau paragraf pertama DOCX) dikirim ke
+\end{enumerate}
+LLM dengan instruksi mengekstrak judul, penulis, tahun, jurnal, volume, no- mor, halaman, DOI, dan penerbit.
+
+19
+
+\begin{enumerate}
+\item Hasil JSON divalidasi dan disimpan pada baris referensi; status menjadi extracted.
+\item Bila gagal (berkas hasil scan, LLM tidak merespons), status menjadi failed dengan pesan galat dan pengguna dapat mengisi metadata manual.
+\end{enumerate}
+3.2.3.2 Algoritma Generator Sitasi
+
+Generator sitasi adalah fungsi murni Python yang menerima metadata refe- rensi dan nama format, lalu menyusun teks sitasi sesuai aturan:
+
+{[}n{]} A. Author, ""Title,"" Journal, vol.
+
+x, no.
+
+\begin{enumerate}
+\item IEEE:
+\end{enumerate}
+y, pp.
+
+z, tahun.
+
+Author, A. (Tahun).
+
+Judul.
+
+Nama Jurnal,
+
+\begin{enumerate}
+\item APA
+\end{enumerate}
+7th:
+
+vol(no), hal.
+
+DOI
+
+\begin{enumerate}
+\item MLA, Chicago, Harvard, Vancouver, dan SNI mengikuti aturan masing- masing.
+\item Nama penulis dinormalisasi (inisial untuk IEEE/Vancouver; nama lengkap untuk APA/SNI).
+\end{enumerate}
+Karena seluruh aturan ditulis sebagai fungsi deterministik, pembangkitan berjalan instan (kurang dari satu detik) dan konsisten.
+
+3.2.3.3 Algoritma Agentic Writing
+
+Agentic writing dijalankan saat pengguna memberi perintah menulis pada tab Agentic Write:
+
+\begin{enumerate}
+\item Sistem memuat seluruh referensi grup laporan aktif dan isi dokumen saat ini.
+\item Prompt disusun berisi daftar referensi bernomor, konteks RAG dari isi jurnal
+\end{enumerate}
+(bila diaktifkan), dan instruksi menulis.
+
+\begin{enumerate}
+\item LLM menghasilkan draf secara streaming dengan penanda sitasi {[}n{]}.
+\item Penanda {[}n{]} diganti menjadi sitasi sesuai format aktif dan daftar pustaka di- bangun.
+\item Draf ditampilkan untuk konﬁrmasi (Terima/Tolak/Edit) sebelum diterapkan ke dokumen.
+\end{enumerate}
+20
+
+3.2.3.4 Algoritma Pembangkit Daftar Pustaka
+
+Daftar pustaka dibangkitkan ulang dengan memindai seluruh penanda {[}n{]} pada isi dokumen, mencocokkan nomor ke referensi (urut created\_at), menyu- sun sitasi sesuai format aktif, dan mengganti bagian ""Daftar Pustaka"" yang lama.
+
+3.2.3.5 Algoritma Ekspor LATEX dan PDF
+
+Draf markdown dikonversi ke source
+
+LATEX:
+
+heading menjadi
+
+\textbackslash\{\}section/\textbackslash\{\}subsection, tabel menjadi tabular, gambar menjadi figure dengan caption, daftar menjadi itemize/enumerate. Source LATEX dikompilasi menjadi PDF memakai tectonic.exe; berkas .tex juga dapat diunduh langsung.
+
+3.2.3.6 Algoritma Pratinjau Rapi (Typeset Preview)
+
+Pratinjau rapi merender markdown menjadi HTML dengan penomoran oto- matis: heading diberi nomor bab (1, 1.1, 1.1.1), gambar diberi caption ""Gambar N"", tabel diberi caption ""Tabel N"", dan margin A4 diterapkan agar tampilan mendekati hasil cetak.
+
+\subsection*{Perancangan Antar Muka (User Interface)}
+\subsection*{3.2.4}
+Antarmuka dirancang dengan tema gelap konsisten dan menu utama: Da- shboard (progres bab, ringkasan referensi, pintasan lanjut menulis), Chat (riset mandiri), Co-Writer (editor tiga kolom: panel percakapan riset di kiri, editor mar- kdown dan pratinjau di tengah, panel Referensi/Agentic Write di kanan), Learning
+
+Space (tab Chat, Referensi, Draf), dan Settings (konﬁgurasi model LLM, format sitasi default, tampilan).
+
+\subsection*{Bab 4 IMPLEMENTASI DAN PENGUJIAN}
+\subsection*{4.1 Implementasi 4.1.1 Lingkungan Implementasi}
+Sistem Nalar AI diimplementasikan dengan lingkungan sebagai berikut:
+
+• Frontend: Next.js 16.2 (React) dengan TypeScript, dijalankan pada port
+
+3000.
+
+• Backend: FastAPI (Python 3.12.3) dengan SQLAlchemy async dan SQLite, dijalankan pada port 8087.
+
+• Model LLM: Penyedia OpenAI-compatible yang dikonﬁgurasi pengguna de- ngan antarmuka streaming.
+
+• Parsing berkas: PyMuPDF (fitz) untuk PDF dan python-docx untuk
+
+DOCX.
+
+• Kompilasi LATEX: tectonic.exe versi 0.15.0.
+
+• Pengujian: pytest 9.1.1 (backend) dan tsc -noEmit (frontend).
+
+Arsitektur penerapan sistem beserta jalur komunikasi antarkomponen disa- jikan pada Gambar 4-1. Permintaan peramban ke /api/\textit{ dan /ws/} diteruskan oleh middleware Next.js ke peladen FastAPI, sedangkan autentikasi memakai coo- kie nalar\_token bertanda httponly yang ditandatangani HS256.
+
+21
+
+22
+
+Peramban Pengguna
+
+HTTPS
+
+Next.js 16 App Router (:3000)
+
+(auth) | (workspace) | (admin)
+
+Co-Writer, Referensi, Dashboard middleware: rewrite /api/\textit{, /ws/}
+
+REST + SSE + WebSocket cookie nalar\_token
+
+Penyedia LLM
+
+FastAPI (:8087) -- app/api/routes/
+
+HTTP
+
+OpenAI-compatible auth | journal | co\_writer | chat | settings
+
+Lapisan Layanan -- app/services/ subprocess tectonic.exe citation\_formatter (fungsi murni, tanpa LLM) agentic\_writer | journal\_metadata | typeset kompilasi PDF docx\_exporter | pdf\_exporter | doc\_import
+
+Berkas uploads/
+
+SQLite
+
+PDF dan gambar nalar\_ai.db
+
+Gambar 4-1
+
+Arsitektur Penerapan Sistem Nalar AI
+
+\subsection*{4.1.2 Implementasi Modul Manajemen Referensi}
+Modul manajemen referensi diimplementasikan pada app/api/routes/journal.py dengan tabel journal\_groups dan journal\_references. Unggahan ber- kas PDF diterima melalui POST /journal/references dengan batas ukuran
+
+25 MB, berkas disimpan pada folder uploads, lalu ekstraksi metadata dijalankan sebagai tugas latar (BackgroundTasks) memakai model LLM hasil konﬁgurasi
+
+Status referensi berpindah dari pending ke extracting, lalu pengguna.
+
+extracted bila berhasil atau failed beserta pesan galat. Antarmuka halaman
+
+Referensi Jurnal ditunjukkan pada Gambar 4-2.
+
+23
+
+\begin{center}
+\includegraphics[width=0.92\textwidth]{http://localhost:8087/uploads/b4dc3341-fa95-4df8-9382-0bdd82b154d1/images/img_002.png}
+\end{center}
+Gambar 4-2
+
+Halaman Referensi Jurnal
+
+Generator sitasi diimplementasikan sebagai fungsi murni Python pada app/services/citation\_formatter.py yang menerima metadata dan nama format (IEEE, APA, MLA, Chicago, Harvard, Vancouver, SNI) lalu meng- embalikan teks sitasi. Karena tidak melibatkan pemanggilan model bahasa, ketujuh format dihasilkan dari metadata yang sama secara instan dan konsisten.
+
+\subsection*{4.1.3 Implementasi Modul Co-Writer}
+Co-Writer diimplementasikan pada app/(workspace)/co-writer dengan layout tiga kolom: panel percakapan riset dan daftar outline (kiri, dapat diubah lebar dan ditutup), editor markdown dengan pratinjau (tengah), dan panel kanan berisi tab Referensi (klik menyisipkan sitasi pada posisi kursor) serta tab
+
+Agentic Write. Pada editor tersedia toolbar (heading H1-H6, penebalan, tabel, taut- an, gambar, blok kode, diagram Mermaid, formula), daftar isi otomatis dari heading
+
+H1-H3, serta pratinjau dua mode ""Draft"" dan ""Rapi"" ala LATEX. Gambar 4-3 dan
+
+Gambar 4-4 menampilkan daftar dokumen Co-Writer dan editor tiga kolom.
+
+24
+
+\begin{center}
+\includegraphics[width=0.92\textwidth]{http://localhost:8087/uploads/b4dc3341-fa95-4df8-9382-0bdd82b154d1/images/img_003.png}
+\end{center}
+Gambar 4-3
+
+Halaman Co-Writer (Daftar Dokumen)
+
+\begin{center}
+\includegraphics[width=0.92\textwidth]{http://localhost:8087/uploads/b4dc3341-fa95-4df8-9382-0bdd82b154d1/images/img_004.png}
+\end{center}
+Gambar 4-4
+
+Editor Co-Writer Tiga Kolom
+
+Daftar isi otomatis disusun oleh komponen OutlineSidebar.tsx de- ngan memindai baris berawalan \# pada isi markdown, sehingga setiap heading da- pat diklik untuk melompat ke posisinya di editor. Hasilnya ditunjukkan pada Gam- bar 4-5.
+
+25
+
+\begin{center}
+\includegraphics[width=0.92\textwidth]{http://localhost:8087/uploads/b4dc3341-fa95-4df8-9382-0bdd82b154d1/images/img_005.png}
+\end{center}
+Gambar 4-5
+
+Daftar Isi Otomatis dari Heading Dokumen
+
+\subsection*{4.1.4 Implementasi Pratinjau Rapi dan Pemeriksaan Draf}
+(typeset preview)
+
+GET
+
+Pratinjau rapi dilayani endpoint
+
+/co\_writer/documents/\{doc\_id\}/typeset yang merender mar- kdown menjadi HTML dengan penomoran bab, gambar, dan tabel otomatis serta margin A4, sehingga tampilan mendekati hasil cetak (Gambar 4-6).
+
+\begin{center}
+\includegraphics[width=0.92\textwidth]{http://localhost:8087/uploads/b4dc3341-fa95-4df8-9382-0bdd82b154d1/images/img_006.png}
+\end{center}
+Pratinjau Rapi (Typeset Preview)
+
+Gambar 4-6
+
+26
+
+(gap analysis)
+
+GET
+
+Pemeriksaan kelengkapan struktur dilayani
+
+/co\_writer/documents/\{doc\_id\}/gap-analysis.
+
+Endpoint ini membandingkan heading dokumen dengan delapan bagian standar artikel ilmiah
+
+(Abstrak, Pendahuluan, Tinjauan Pustaka, Metodologi, Hasil, Pembahasan, Kesim- pulan, Daftar Pustaka) memakai pencocokan substring tanpa memperhatikan huruf besar-kecil, lalu melaporkan bagian yang sudah dan belum ada. Pengujian pada dokumen uji menghasilkan 8 dari 8 bagian terdeteksi (Gambar 4-7).
+
+\begin{center}
+\includegraphics[width=0.92\textwidth]{http://localhost:8087/uploads/b4dc3341-fa95-4df8-9382-0bdd82b154d1/images/img_007.png}
+\end{center}
+Gambar 4-7
+
+Hasil Pemeriksaan Kelengkapan Struktur
+
+Pemeriksaan sitasi dilayani POST /co\_writer/documents/\{doc\_id\}/ai-checks
+
+Berbeda dengan modul lain, pemeriksaan ini tidak memanggil model bahasa:
+
+seluruhnya dikerjakan dengan pencocokan pola (regular expression) di sisi peladen, yaitu menandai kalimat berpola klaim (mengandung ungkapan seperti ""berdasarkan data"", ""hasil penelitian menunjukkan"", ""terbukti"", atau angka persentase) yang tidak disertai penanda sitasi di sekitarnya, serta menghitung variasi penulisan istilah.
+
+Karena berbasis pola, keluarannya bersifat saran, bukan validasi wajib.
+
+Pada dokumen uji, pemeriksaan menemukan empat kalimat klaim tanpa sitasi
+
+(Gambar 4-8).
+
+27
+
+\begin{center}
+\includegraphics[width=0.92\textwidth]{http://localhost:8087/uploads/b4dc3341-fa95-4df8-9382-0bdd82b154d1/images/img_008.png}
+\end{center}
+Gambar 4-8
+
+Hasil Pemeriksaan Sitasi dan Konsistensi Istilah
+
+\subsection*{4.1.5 Implementasi Agentic Write dan Ekspor}
+Agentic write diimplementasikan pada app/services/agentic\_writer.py
+
+POST /co\_writer/agent-write untuk pe- dan dilayani dua endpoint:
+
+manggilan biasa dan POST /co\_writer/agent-write/stream yang mengalirkan hasil sebagai Server-Sent Events sehingga pengguna melihat AI mengetik secara langsung. Alurnya: memuat seluruh referensi grup laporan aktif berurut created\_at, menyusun prompt berisi daftar referensi bernomor dan konteks RAG (bila diaktifkan), memanggil LLM, lalu memvalidasi penanda {[}n{]} pada keluaran model melalui replace\_citation\_markers().
+
+Fungsi tersebut membiarkan penanda yang tidak merujuk nomor referensi sah apa adanya, menormalkan penomoran penanda yang sah, dan membangkitkan teks sitasi lengkapnya dengan generate\_citation() untuk dikembalikan sebagai daftar sitasi terpakai. Dengan pemisahan ini, teks sitasi tidak pernah dikarang oleh model bahasa. Draf tidak langsung ditulis ke dokumen: pengguna mengonﬁrmasi terlebih dahulu (Gambar 4-9). Bila grup belum memiliki referensi, sistem menolak permintaan dengan kode 422 dan pesan ""Grup ini belum memiliki referensi jurnal.""
+
+28
+
+\begin{center}
+\includegraphics[width=0.92\textwidth]{http://localhost:8087/uploads/b4dc3341-fa95-4df8-9382-0bdd82b154d1/images/img_009.png}
+\end{center}
+Gambar 4-9
+
+Panel Agentic Write
+
+Ekspor disediakan melalui tiga endpoint: GET /documents/\{doc\_id\}/export-late menghasilkan source LATEX, GET /documents/\{doc\_id\}/export?format=pdf mengonversi markdown ke LATEX lalu mengompilasinya dengan tectonic.exe,
+
+GET /documents/\{doc\_id\}/export?format=docx dan mengha- python-docx
+
+{[}n{]} silkan
+
+DOCX melalui dengan penanda sitasi diu-
+
+Checkpoint diimplementasikan pada tabel bah menjadi tautan DOI aktif.
+
+co\_writer\_checkpoints beserta endpoint penyimpanan, pembacaan, dan pemulihan (.../checkpoints/\{cp\_id\}/restore); fungsi ini tersedia di sisi peladen dan belum memiliki antarmuka riwayat versi di sisi klien.
+
+\subsection*{4.1.6 Implementasi Halaman Pendukung}
+Halaman Dashboard menampilkan progres penulisan, ringkasan referensi per grup, dan pintasan melanjutkan menulis (Gambar 4-10). Halaman Learning
+
+Space menggabungkan tab Chat, Referensi, dan Draf dengan kolom pencarian per- cakapan serta pengelompokan berdasarkan rentang waktu (Gambar 4-11). Halaman
+
+Pengaturan Model dipakai untuk memilih penyedia dan model LLM yang dipakai seluruh modul (Gambar 4-12).
+
+29
+
+\begin{center}
+\includegraphics[width=0.92\textwidth]{http://localhost:8087/uploads/b4dc3341-fa95-4df8-9382-0bdd82b154d1/images/img_010.png}
+\end{center}
+Gambar 4-10
+
+Dashboard Nalar AI
+
+\begin{center}
+\includegraphics[width=0.92\textwidth]{http://localhost:8087/uploads/b4dc3341-fa95-4df8-9382-0bdd82b154d1/images/img_011.png}
+\end{center}
+Gambar 4-11
+
+Learning Space
+
+30
+
+\begin{center}
+\includegraphics[width=0.92\textwidth]{http://localhost:8087/uploads/b4dc3341-fa95-4df8-9382-0bdd82b154d1/images/img_012.png}
+\end{center}
+Gambar 4-12
+
+Halaman Pengaturan Model LLM
+
+\subsection*{4.2 Pengujian 4.2.1 Lingkungan Pengujian}
+Pengujian dilakukan pada peramban web modern (Chromium) dengan alur manual black-box untuk setiap modul, serta uji otomatis pytest pada backend dan tsc -noEmit pada frontend. Login uji memakai akun debugger2.
+
+\subsection*{4.2.2 Hasil Pengujian}
+Hasil pengujian fungsional disajikan pada Tabel 4-1.
+
+31
+
+Tabel 4-1
+
+Hasil Pengujian Fungsional
+
+\begin{table}[h]
+\centering
+\begin{tabular}{llll}
+\toprule
+No & Kasus Uji & Hasil & Catatan \\
+\midrule
+--- & --- & --- & --- \\
+1 & Unggah PDF jurnal & Sesuai & Metadata diekstrak (judul, penulis, tahun, DOI); status extracted \\
+2 & Impor laporan DOCX ke Co-Writer & Sesuai & Teks, heading, dan gambar di- ekstrak; media tersimpan di uploads/\{doc id\}/images/ \_ \\
+3 & Generate sitasi 7 for- mat & Sesuai & IEEE/APA/MLA/Chicago/Harvard/Vancouv dihasilkan dari metadata sama \\
+4 & Simpan sitasi ke kate- gori & Sesuai & Sitasi tersimpan di Learning Space \\
+5 & Cari jurnal internet & Sesuai & Hasil web + arXiv muncul dan dapat di- simpan ke grup \\
+6 & Agentic write & Sesuai & Draf dibuat dengan sitasi {[}n{]}; konfirmasi Terima/Tolak/Edit berfungsi \\
+7 & Ekspor LATEX & Sesuai & source .tex dengan \textbackslash\{\}section valid \\
+8 & Ekspor PDF (tectonic) & Sesuai & PDF \%PDF valid (magic bytes) \\
+9 & Ekspor DOCX & Sesuai & DOCX dengan tautan DOI; berkas ZIP va- lid \\
+10 & Quick-cite {[}{[} & Sesuai & Popup muncul, pilih referensi menyisip si- tasi \\
+11 & Checkpoint (API) & Sesuai & Snapshot tersimpan; restore mengembalik- an isi. Belum ada antarmuka riwayat versi \\
+12 & Cek struktur (gap ana- lysis) & Sesuai & Delapan bagian standar terdeteksi 8/8 pada dokumen uji \\
+13 & Cek sitasi (ai-checks) & Sesuai & Empat kalimat klaim tanpa sitasi ditemuk- an; berbasis pola, bukan LLM \\
+14 & Pratinjau rapi (typeset) & Sesuai & Heading bernomor otomatis, margin A4 \\
+\bottomrule
+\end{tabular}
+\end{table}
+Pengujian otomatis pada sisi peladen dijalankan dengan pytest dan meng- hasilkan 34 dari 34 kasus uji lulus (test\_journal\_citations.py 13 ka- sus, test\_parsing\_settings.py 19 kasus, dan test\_turnplan.py 2
+
+32 kasus) dengan waktu eksekusi 12,23 detik. Pada sisi klien, pemeriksaan tipe tsc
+
+-noEmit berjalan tanpa galat. Seluruh endpoint inti (manajemen referensi, gene-
+
+rator sitasi, Co-Writer, agentic write, pemeriksaan draf, pratinjau rapi, checkpoint, dan ekspor) bekerja sesuai spesiﬁkasi.
+
+\subsection*{4.2.3 Perbaikan Cacat yang Ditemukan Saat Pengujian}
+Pengujian antarmuka menemukan dua cacat tampilan yang keduanya telah diperbaiki pada berkas app/(workspace)/co-writer/{[}docId{]}/page.tsx:
+
+\begin{enumerate}
+\item Popover pemeriksaan terpotong.
+\end{enumerate}
+Baris toolbar editor memakai kelas overflow-x-auto. Menurut spesiﬁkasi CSS, nilai overﬂow visible pada satu sumbu ikut dihitung menjadi auto apabila sumbu lainnya buk- an visible, sehingga baris toolbar berubah menjadi kotak pemotong pada sumbu vertikal. Akibatnya popover Daftar Isi, Cek Struktur, dan Cek Sita- si yang diposisikan tepat di bawah toolbar hampir seluruhnya tidak tampak:
+
+pengukuran memperlihatkan tinggi popover 290 piksel sementara batas ba- wah kotak pemotong hanya 7 piksel di bawah tepi atas popover, yakni seki- tar 97 persen isinya terpotong. Perbaikan dilakukan dengan memindahkan overflow-x-auto dari baris toolbar ke kelompok tombol pemformatan yang tidak memuat elemen melayang.
+
+\begin{enumerate}
+\item Panel outline menimpa panel percakapan. Pembungkus panel outline be- lum berupa ﬂex container vertikal, sedangkan komponen di dalamnya me- makai flex-1, sehingga daftar heading yang panjang meluber dan menutu- pi judul ""Chat Riset"" beserta blok status Referensi di bawahnya. Perbaikan dilakukan dengan menetapkan pembungkusnya sebagai kolom ﬂex berbatas tinggi yang menyembunyikan luberan.
+\end{enumerate}
+\subsection*{Bab 5 PENUTUP 5.1 Kesimpulan}
+Berdasarkan seluruh tahapan analisis, perancangan, implementasi, dan pe- ngujian sistem Nalar AI, diperoleh kesimpulan sebagai berikut:
+
+\begin{enumerate}
+\item Sistem manajemen referensi jurnal berhasil dibangun: unggahan berkas PDF
+\end{enumerate}
+(maksimal 25 MB) diproses untuk mengekstrak metadata (judul, penulis, ta- hun, jurnal, DOI) secara otomatis memakai LLM sebagai tugas latar, referen- si dikelompokkan per grup laporan, dan generator sitasi menghasilkan tujuh format baku (IEEE, APA, MLA, Chicago, Harvard, Vancouver, SNI) seca- ra instan dari metadata yang sama tanpa pemanggilan model bahasa. Hasil pengujian menunjukkan seluruh format dihasilkan dengan benar dan dapat disalin atau disimpan ke kategori sitasi.
+
+\begin{enumerate}
+\item Agentic writing pada Co-Writer berhasil diimplementasikan: AI membaca seluruh referensi grup laporan aktif dan keseluruhan isi draf, menyu- sun bab utuh dengan penanda sitasi {[}n{]}, lalu menampilkan draf untuk konﬁrmasi (Terima/Tolak/Edit) sebelum diterapkan.
+\end{enumerate}
+Validasi penan- da {[}n{]} dan pembangkitan teks sitasinya dikerjakan oleh sistem melalui replace\_citation\_markers() generate\_citation(), dan bukan oleh model bahasa, sehingga setiap klaim tertambat pada daftar pustaka secara deterministik.
+
+\begin{enumerate}
+\item Pratinjau rapi ala LATEX dan ekspor berkualitas berhasil diwujudkan: mar- kdown dirender dengan penomoran bab, gambar, dan tabel otomatis; ekspor tersedia dalam format LATEX (.tex), PDF (dikompilasi dengan tectonic), dan DOCX dengan tautan DOI aktif, yang mempertahankan struktur hea- ding, tabel, gambar, dan daftar pustaka. Seluruh jalur ekspor berjalan tanpa memanggil model bahasa.
+\item Fitur pendukung yang mempercepat alur penulisan juga berjalan, yaitu daftar isi otomatis dari heading H1-H3, penyisipan sitasi cepat melalui trigger {[}{[}, analisis kesenjangan struktur terhadap delapan bagian baku artikel ilmiah, serta deteksi kalimat klaim tanpa sitasi yang dikerjakan dengan pencocokan pola di sisi peladen.
+\end{enumerate}
+33
+
+34
+
+\subsection*{5.2 Keterbatasan Sistem}
+Agar cakupan hasil penelitian terbaca apa adanya, berikut bagian spesiﬁkasi yang belum terwujud pada versi sistem yang diuji:
+
+\begin{enumerate}
+\item Checkpoint versi dokumen sudah tersedia lengkap pada sisi peladen (simpan, daftar, dan pemulihan), tetapi belum memiliki antarmuka riwayat versi pada sisi klien sehingga hanya dapat diakses melalui API.
+\item Pemeriksaan draf (ai-checks) masih berbasis pencocokan pola, belum mema- kai model bahasa, sehingga keluarannya bersifat saran dan dapat menandai kalimat yang sebenarnya tidak memerlukan sitasi.
+\item Hasil agentic write diterapkan sebagai satu blok utuh; pembandingan baris demi baris (inline diff) beserta tombol Terima/Tolak per bagian belum terse- dia.
+\item Ringkasan otomatis per bab dan ﬁtur penangkapan bagian dokumen (capture) belum diimplementasikan.
+\item Kemampuan analisis gambar (vision), baik pada saat penangkapan maupun pada saat impor berkas, serta pengenalan teks (OCR) untuk berkas hasil pin- dai belum tersedia; berkas PDF tanpa lapisan teks harus diisi metadatanya secara manual.
+\end{enumerate}
+\subsection*{5.3 Saran}
+Untuk pengembangan selanjutnya, disarankan beberapa hal berikut:
+
+\begin{enumerate}
+\item Membangun antarmuka riwayat versi pada Co-Writer yang memakai API checkpoint yang sudah tersedia, dilengkapi pembandingan isi antarversi.
+\item Mengganti pemeriksaan draf berbasis pola dengan pemeriksaan berbantuan model bahasa agar penilaian kebutuhan sitasi lebih tepat, dengan tetap me- nampilkan alasan setiap temuan.
+\item Menyediakan inline diff beserta tombol Terima/Tolak per bagian pada hasil agentic write sehingga pengguna dapat menerima sebagian usulan saja.
+\item Menambah kemampuan analisis gambar (vision) dan pengenalan teks (OCR) agar diagram, tabel, dan berkas hasil pindai dapat dipahami sistem.
+\end{enumerate}
+35
+
+\begin{enumerate}
+\item Menambahkan integrasi langsung dengan Google Scholar dan basis data pus- taka lain agar pencarian dan penyimpanan referensi berbahasa Indonesia lima tahun terakhir semakin otomatis.
+\item Menerapkan sinkronisasi dua arah ala SyncTeX antara editor dan pratinjau rapi (klik pada pratinjau melompat ke baris sumber yang sesuai).
+\item Menyediakan dukungan template kampus yang dapat dipilih (skripsi, jurnal, makalah) dengan pengaturan margin dan gaya yang berbeda-beda.
+\item Memperluas format ekspor ke format yang dibutuhkan pengelola jurnal ter- tentu serta meningkatkan kapasitas unggahan untuk berkas berukuran besar.
+\end{enumerate}
+\subsection*{DAFTAR PUSTAKA}
+{[}1{]} P. Lewis et al., ""Retrieval-augmented generation for knowledge-intensive
+
+NLP tasks,"" Advances in Neural Information Processing Systems (NeurIPS), vol. 33, pp. 9459-9474, 2020.
+
+{[}2{]} Y. Gao et al., ""Retrieval-augmented generation for large language models: A survey,"" arXiv preprint arXiv:2312.10997, 2023.
+
+{[}3{]} A. Vaswani et al., ""Attention is all you need,"" in Advances in Neural Informa- tion Processing Systems (NeurIPS), 2017, pp. 5998-6008.
+
+{[}4{]} S. Yao et al., ""ReAct: Synergizing reasoning and acting in language models,"" in Int. Conf. on Learning Representations (ICLR), 2023.
+
+{[}5{]} T. Schick et al., ""Toolformer: Language models can teach themselves to use tools,"" in Advances in Neural Information Processing Systems (NeurIPS), vol. 36, 2023.
+
+{[}6{]} L. Wang et al., ""A survey on large language model based autonomous agents,""
+
+Frontiers of Computer Science, vol. 18, no. 6, 2024.
+
+{[}7{]} Z. Ji et al., ""Survey of hallucination in natural language generation,"" ACM
+
+Computing Surveys, vol. 55, no. 12, pp. 1-38, 2023.
+
+{[}8{]} D. P. Sari dan A. Wijaya, ""Implementasi retrieval-augmented generation un- tuk meningkatkan akurasi jawaban chatbot pendidikan,"" Jurnal RESTI, vol. 6, no. 4, pp. 612-620, 2022.
+
+{[}9{]} T. Hidayat dan R. Nugraha, ""Pengembangan sistem tanya jawab dokumen menggunakan retrieval-augmented generation dan embedding,"" Jurnal Teknik
+
+Informatika (JUTIF), vol. 4, no. 3, pp. 701-710, 2023.
+
+{[}10{]} F. Rahman dan D. Kurniawan, ""Analisis penerapan large language model pada sistem pembelajaran adaptif di perguruan tinggi,"" Jurnal Edukasi dan Peneli- tian Informatika (JEPIN), vol. 9, no. 2, pp. 245-254, 2023.
+
+{[}11{]} A. R. Putri dan B. Setiawan, ""Penerapan chatbot berbasis natural language processing pada layanan informasi akademik,"" Jurnal Teknologi Informasi dan
+
+Ilmu Komputer, vol. 8, no. 3, pp. 521-530, 2021.
+
+36
+
+37
+
+{[}12{]} R. Maulana dan A. Puspitasari, ""Sistem agen cerdas berbasis agentic AI untuk penulisan laporan tugas akhir,"" Jurnal Sistem Cerdas dan Rekayasa Perangkat
+
+Lunak, vol. 8, no. 1, pp. 12-23, 2026.
+
+{[}13{]} D. E. Knuth, The TeXbook. Reading, MA: Addison-Wesley, 1986.
+
+\subsection*{LAMPIRAN A KODE SUMBER MODUL INTI}
+Berikut cuplikan kode sumber modul inti aplikasi Nalar AI yang mendukung generator sitasi, agentic writing, dan ekspor LATEX. Cuplikan disalin langsung dari berkas sumber pada direktori Nalar.ai-be/app/services/.
+
+\subsection*{A.1 Modul Generator Sitasi (citation\_formatter.py)}
+Modul ini mengubah metadata referensi menjadi sitasi dalam tujuh format baku. Seluruh fungsi bersifat murni (deterministik) sehingga pembangkitan berjalan instan tanpa panggilan LLM. Pemilihan format dilakukan melalui tabel pemetaan
+
+\_FORMATTERS.
+
+1 def format\_ieee(meta: dict) -\textgreater{} str:
+
+"""{[}1{]} A. Author and B. Author, "Title," Journal, vol. x, no.
+
+2 y, pp. z, 2026."""
+
+\_require(meta, "title", "year")
+
+3 authors = \_authors\_list(meta.get("authors"))
+
+4 year = meta{[}"year"{]}
+
+5 title = str(meta{[}"title"{]}).strip().rstrip(".")
+
+6 journal = str(meta.get("journal\_name") or "").strip().rstrip("
+
+7
+
+.") body = f'"\{title\},"'
+
+8 if journal:
+
+9 body += f" \{journal\}"
+
+10 vi = \_vol\_issue(meta)
+
+11 if vi:
+
+12 body += f", \{vi\}"
+
+13 pg = \_pages(meta)
+
+14 if pg:
+
+15 body += f", \{pg\}"
+
+16 body += f", \{year\}."
+
+17 if not authors:
+
+18 return body
+
+19 initials = {[}\_initials(a) for a in authors{[}:6{]}{]}
+
+20 if len(initials) == 1:
+
+21 names = initials{[}0{]}
+
+22 elif len(initials) == 2:
+
+23 names = f"\{initials{[}0{]}\} and \{initials{[}1{]}\}"
+
+24
+
+38
+
+39 else:
+
+25 names = ", ".join(initials{[}:-1{]}) + f", and \{initials{[}-1{]}\}"
+
+26 return f"\{names\}, \{body\}"
+
+27
+
+28
+
+29 \# ... (dipotong: format\_apa, format\_mla, format\_chicago,
+
+30 \# format\_harvard, format\_vancouver, format\_sni)
+
+31
+
+32 def generate\_citation(meta: dict, format\_name: str = "ieee") -\textgreater{} str:
+
+"""Generate satu sitasi dari metadata.
+
+33
+
+34
+
+Args:
+
+35 meta: dict berisi title, authors, year, journal\_name,
+
+36 volume, issue, pages, doi, publisher.
+
+37 format\_name: salah satu dari CITATION\_FORMATS.
+
+38
+
+39
+
+Raises:
+
+40
+
+CitationError: format tidak dikenal atau metadata tidak
+
+41 lengkap.
+
+"""
+
+42 key = (format\_name or "ieee").lower().strip()
+
+43 if key not in \_FORMATTERS:
+
+44 raise CitationError(f"Format sitasi tidak dikenal: \{
+
+45 format\_name\}. " f"Pilihan: \{', '.join(CITATION\_FORMATS
+
+46
+
+)\}") return \_FORMATTERS{[}key{]}(meta)
+
+47 citation\_formatter.py -- format IEEE dan gerbang pemilihan
+
+Listing 1 format
+
+\subsection*{A.2 Modul Agentic Writing (agentic\_writer.py)}
+Modul ini menyusun draf bab dengan membaca seluruh referensi grup lapor- an aktif berurut created\_at, menyusun prompt berisi daftar referensi bernomor, memanggil LLM, lalu memvalidasi penanda sitasi yang dikembalikan model.
+
+references = list(
+
+1
+
+(
+
+2 await db.scalars(
+
+3 select(JournalReference)
+
+4
+
+.where(
+
+5
+
+40
+
+JournalReference.group\_id == group\_id,
+
+6
+
+JournalReference.user\_id == user.id,
+
+7
+
+)
+
+8
+
+.order\_by(JournalReference.created\_at.asc())
+
+9
+
+)
+
+10
+
+).all()
+
+11
+
+)
+
+12 if not references:
+
+13 raise ValueError("Grup ini belum memiliki referensi jurnal
+
+14
+
+. Upload jurnal dulu.")
+
+15 ref\_block = \_reference\_block(references)
+
+16 context = rag\_context{[}:\_MAX\_REFERENCE\_CHARS{]} if rag\_context
+
+17 else "" prompt = (
+
+18 f"Grup laporan: \{group.name\}\textbackslash\{\}n"
+
+19 f"Perintah user: \{instruction\}\textbackslash\{\}n\textbackslash\{\}n"
+
+20 f"Daftar referensi yang tersedia (nomor = sitasi yang
+
+21 wajib dipakai):\textbackslash\{\}n\{ref\_block\}\textbackslash\{\}n\textbackslash\{\}n"
+
+)
+
+22 if context:
+
+23 prompt += (
+
+24
+
+"Konteks isi jurnal (dari RAG - gunakan untuk menulis
+
+25 akurat, "
+
+"tetap sitasi dengan nomor di atas):\textbackslash\{\}n"
+
+26 f"\{context\}\textbackslash\{\}n\textbackslash\{\}n"
+
+27
+
+)
+
+28 prompt += (
+
+29
+
+"Tulis bagian laporan sesuai perintah. Sertakan sitasi {[}n{]}
+
+30 pada kalimat yang "
+
+"mengambil informasi dari referensi bernomor n."
+
+31
+
+)
+
+32
+
+33 writer = AgenticWriter(llm)
+
+34 raw = await writer.ask(prompt, system=\_SYSTEM\_AGENTIC\_WRITER)
+
+35
+
+36 draft, used = replace\_citation\_markers(raw, references,
+
+37 format\_name) return \{
+
+38
+
+"draft": draft,
+
+39
+
+"references": used,
+
+40
+
+"citation\_count": len(used),
+
+41
+
+41
+
+\}
+
+42 agentic\_writer.py -- pemuatan referensi dan penyusunan
+
+Listing 2 prompt
+
+Fungsi replace\_citation\_markers() berperan sebagai penjaga in- tegritas sitasi. Penanda {[}n{]} yang tidak merujuk nomor referensi yang sah dibiarkan apa adanya, sedangkan penanda yang sah dinormalkan penomorannya dan teks si- tasi lengkapnya dikumpulkan pada senarai used untuk ditampilkan sebagai daftar pustaka draf. Dengan cara ini, teks sitasi tidak pernah dikarang oleh model bahasa.
+
+1 def resolve\_reference\_ids(references: list{[}JournalReference{]}, markers: list{[}str{]}) -\textgreater{} list{[}int{]}:
+
+"""Cari nomor referensi yang disebut LLM (mis. {[}1{]}, {[}2{]}) -
+
+2 index 0-based.""" ids: list{[}int{]} = {[}{]}
+
+3 for marker in markers:
+
+4 match = re.search(r"\textbackslash\{\}d+", marker)
+
+5 if match:
+
+6 idx = int(match.group()) - 1
+
+7 if 0 \textless{}= idx \textless{} len(references) and idx not in ids:
+
+8 ids.append(idx)
+
+9 return ids
+
+10
+
+11
+
+12
+
+13 def replace\_citation\_markers(text: str, references: list{[}
+
+JournalReference{]}, format\_name: str) -\textgreater{} tuple{[}str, list{[}
+
+14 str{]}{]}:
+
+"""Ganti {[}n{]} dengan sitasi format pilihan; kembalikan (teks,
+
+15 daftar sitasi terpakai).""" used: list{[}str{]} = {[}{]}
+
+16
+
+17 def \_replacer(match: re.Match) -\textgreater{} str:
+
+18 marker = match.group(0)
+
+19 ids = resolve\_reference\_ids(references, {[}marker{]})
+
+20 if not ids:
+
+21 return marker
+
+\section*{biarkan bila bukan nomor referensi}
+22 valid idx = ids{[}0{]}
+
+23 ref = references{[}idx{]}
+
+24 try:
+
+25 citation = generate\_citation(
+
+26 citation\_meta\_from\_reference(ref), format\_name)
+
+42 except CitationError:
+
+27 citation = f"\{ref.title\} (\{ref.year if ref.year else '
+
+28 t.t.'\})" used.append(citation)
+
+29 return f"{[}\{idx + 1\}{]}"
+
+30
+
+31 replaced = re.sub(r"\textbackslash\{\}{[}(\textbackslash\{\}d+)\textbackslash\{\}{]}", \_replacer, text)
+
+32 return replaced, used
+
+33 agentic\_writer.py -- validasi dan normalisasi penanda sitasi
+
+Listing 3
+
+\subsection*{A.3 Modul Ekspor LATEX (latex\_export.py)}
+Modul ini mengonversi markdown menjadi source LATEX lalu mengompi- lasinya menjadi PDF memakai tectonic. Konversi menangani heading empat tingkat, gambar, dan tabel.
+
+1 def markdown\_to\_latex(markdown\_text: str) -\textgreater{} str:
+
+"""Markdown -\textgreater{} source LaTeX lengkap (preamble + body +
+
+2 postamble).""" lines = markdown\_text.split("\textbackslash\{\}n")
+
+3 out: list{[}str{]} = {[}\_PREAMBLE{]}
+
+4 fig\_count = 0
+
+5 i = 0
+
+6 while i \textless{} len(lines):
+
+7 line = lines{[}i{]}.rstrip()
+
+8 stripped = line.strip()
+
+9
+
+10
+
+\section*{Heading}
+11 m = re.match(r"\textasciicircum{}(\#\{1,4\})\textbackslash\{\}s+(.*)$", stripped)
+
+12 if m:
+
+13 level = len(m.group(1))
+
+14 cmd = \{1: "section", 2: "subsection",
+
+15
+
+3: "subsubsection", 4: "paragraph"\}{[}level{]}
+
+16 out.append(f"\textbackslash\{\}\textbackslash\{\}\{cmd\}\{\{\{\_inline(m.group(2))\}\}\}")
+
+17 i += 1
+
+18 continue
+
+19
+
+20
+
+\section*{Gambar markdown !{[}alt{]}(url)}
+21 m = re.match(r"!\textbackslash\{\}{[}({[}\textasciicircum{}\textbackslash\{\}{]}{]}*)\textbackslash\{\}{]}\textbackslash\{\}(({[}\textasciicircum{}){]}+)\textbackslash\{\})", stripped)
+
+22 if m:
+
+23 src = m.group(2)
+
+24
+
+\section*{WMF/EMF tidak didukung LaTeX -\textgreater{} skip (tampilkan}
+25 catatan)
+
+43 if re.search(r"\textbackslash\{\}.wmf|\textbackslash\{\}.emf", src, re.I):
+
+26 out.append(r"\textbackslash\{\}textit\{{[}Gambar WMF tidak didukung
+
+27
+
+LaTeX{]}\}\%") i += 1
+
+28 continue
+
+29 fig\_count += 1
+
+30 alt = m.group(1) or f"Gambar \{fig\_count\}"
+
+31 out.append(r"\textbackslash\{\}begin\{figure\}{[}h{]}")
+
+32 out.append(r"\textbackslash\{\}centering")
+
+33 out.append(f"\textbackslash\{\}\textbackslash\{\}includegraphics{[}width=0.8\textbackslash\{\}\textbackslash\{\}textwidth
+
+34
+
+{]}\{\{\{src\}\}\}") out.append(f"\textbackslash\{\}\textbackslash\{\}caption\{\{\{\_escape(alt)\}\}\}")
+
+35 out.append(r"\textbackslash\{\}end\{figure\}")
+
+36 i += 1
+
+37 continue
+
+38
+
+39
+
+\section*{... (dipotong: penanganan tabel, daftar, blok kode, dan}
+40 paragraf biasa) latex\_export.py -- konversi heading, gambar, dan tabel
+
+Listing 4
+
+Pada tahap kompilasi, URL gambar yang tersimpan pada dokumen ditulis ulang menjadi jalur berkas lokal karena tectonic tidak dapat mengunduh berkas melalui HTTP.
+
+1 def compile\_latex\_pdf(latex\_source: str, output\_dir: str, jobname: str = "laporan") -\textgreater{} str:
+
+2
+
+"""Compile source LaTeX -\textgreater{} PDF via tectonic. Return path PDF.
+
+3
+
+4
+
+Gambar direferensikan lewat URL absolut; tectonic tidak bisa
+
+5 fetch http, jadi URL di-rewrite ke path lokal bila file ada di uploads/.
+
+6
+
+"""
+
+7 os.makedirs(output\_dir, exist\_ok=True)
+
+8
+
+9
+
+\section*{Rewrite URL gambar -\textgreater{} path lokal absolut (bila ada di}
+10 uploads/) def \_local\_path(url: str) -\textgreater{} str:
+
+11 m = re.search(r"/uploads/({[}0-9a-f-{]}\{36\})/images/({[}\textasciicircum{}){]}+)",
+
+12 url) if m:
+
+13 candidate = os.path.join("uploads", m.group(1), "
+
+14 images", m.group(2)) if os.path.exists(candidate):
+
+15
+
+44 return os.path.abspath(candidate).replace("\textbackslash\{\}\textbackslash\{\}", "/
+
+16
+
+") return url
+
+17
+
+18 tex\_source = re.sub(
+
+19 r"\textbackslash\{\}\textbackslash\{\}includegraphics(\textbackslash\{\}{[}{[}\textasciicircum{}\textbackslash\{\}{]}{]}*\textbackslash\{\}{]})?\textbackslash\{\}\{({[}\textasciicircum{}\}{]}+)\textbackslash\{\}\}",
+
+20 lambda mm: f"\textbackslash\{\}\textbackslash\{\}includegraphics\{mm.group(1) or ''\}\{\{\{
+
+21
+
+\_local\_path(mm.group(2))\}\}\}", latex\_source,
+
+22
+
+)
+
+23
+
+\section*{... (dipotong: penulisan berkas .tex dan pemanggilan}
+24 subprocess tectonic) latex\_export.py -- penulisan ulang jalur gambar sebelum
+
+Listing 5 kompilasi
+
+Catatan: nilai token autentikasi, kunci API penyedia LLM, dan isi berkas konﬁgu- rasi lingkungan (.env) tidak disertakan pada lampiran ini.
+
+
+\end{document}
+
+### bf181917d4024be885f3e9de81d201e9
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{geometry}
+\usepackage{setspace}
+\usepackage{hyperref}
+% Margin template kampus: atas 4 / bawah 3 / kiri 4 / kanan 3 cm — sama dengan
+% chromium_pdf.MARGIN dan docx_template_exporter, supaya ketiga jalur ekspor
+% (PDF LaTeX, PDF Chromium, DOCX) menghasilkan tata letak yang seragam.
+\geometry{a4paper,top=4cm,bottom=3cm,left=4cm,right=3cm}
+\onehalfspacing
+\title{}
+\date{}
+\begin{document}
+
+\begin{center}
+\textbf{\large NALAR AI: PENGEMBANGAN RUANG KERJA PENULISAN}
+\textbf{\large JURNAL BERBANTUAN AI DENGAN AGENTIC WRITING, SITASI MULTI-FORMAT, DAN EKSPOR TYPESET LATEX}
+\textbf{\large LAPORAN TUGAS AKHIR}
+Diajukan untuk memenuhi kelulusan matakuliah Tugas Akhir pada Program Studi DIII Teknik Informatika
+
+Disusun Oleh :
+
+Nama : MUHAMMAD MAFTUH
+
+NPM
+
+: 613230021
+
+\includegraphics[width=0.51\textwidth]{http://localhost:8087/uploads/bf181917-d402-4be8-85f3-e9de81d201e9/images/img_001.png}
+\textbf{\large PROGRAM DIPLOMA III TEKNIK INFORMATIKA}
+\textbf{\large SEKOLAH TEKNOLOGI INFORMASI}
+\textbf{\large UNIVERSITAS LOGISTIK DAN BISNIS INTERNASIONAL}
+\textbf{\large BANDUNG 2026}
+\end{center}
+\newpage
+\subsection*{LEMBAR PENGESAHAN DOSEN PEMBIMBING}
+\subsection*{NALAR AI: PENGEMBANGAN RUANG KERJA PENULISAN}
+\subsection*{JURNAL BERBANTUAN AI DENGAN AGENTIC WRITING, SITASI MULTI-FORMAT, DAN EKSPOR TYPESET LATEX}
+\subsection*{TUGAS AKHIR}
+Laporan Tugas Akhir ini telah diperiksa, disetujui dan disidangkan
+
+Di Bandung, ........................2026
+
+Oleh:
+
+Pembimbing Utama
+
+Pembimbing Pendamping
+
+Widia Resdiana, S.S., M.Pd.
+
+Muhammad Ruslan Maulani, S.Kom., M.T.
+
+NIDN. ..................
+
+NIDN. ..................
+
+Mengetahui,
+
+Ketua Program Studi DIII Teknik Informatika
+
+(....................................)
+
+NIDN. ........................
+
+i
+
+\subsection*{LEMBAR PENGESAHAN DOSEN PENGUJI}
+\subsection*{NALAR AI: PENGEMBANGAN RUANG KERJA PENULISAN}
+\subsection*{JURNAL BERBANTUAN AI DENGAN AGENTIC WRITING, SITASI MULTI-FORMAT, DAN EKSPOR TYPESET LATEX}
+\subsection*{TUGAS AKHIR}
+Laporan Tugas Akhir ini telah diuji dan dipertahankan di depan Dewan Penguji
+
+Pada Sidang Tugas Akhir Tanggal ........................2026
+
+Di Bandung
+
+Penguji I
+
+Penguji II
+
+(.... . ... . ... . ... ........... .........)
+
+(....................................)
+
+NIDN. .. ... ...................
+
+NIDN. ........................
+
+ii
+
+\subsection*{SURAT PERNYATAAN}
+Dengan ini saya menyatakan bahwa:
+
+\begin{enumerate}
+\item Tugas Akhir ini adalah asli dan belum pernah diajukan untuk mendapatkan gelar akademik, baik di Universitas Logistik dan Bisnis Internasional maupun perguruan tinggi lainnya.
+\item Tugas Akhir ini murni merupakan karya penelitian saya sendiri dan tidak menjiplak karya pihak lain. Dalam hal ada bantuan atau arahan dari pihak lain maka telah saya sebutkan identitas dan jenis bantuannya di dalam lembar ucapan terima kasih / kata pengantar.
+\item Seandainya ada karya pihak lain yang ternyata memiliki kemiripan dengan karya saya ini, maka hal ini adalah di luar pengetahuan saya dan terjadi tanpa kesengajaan dari pihak saya.
+\end{enumerate}
+Pernyataan ini saya buat dengan sesungguhnya dan apabila di kemudian ha- ri terbukti adanya kebohongan dalam pernyataan ini, maka saya bersedia menerima sanksi akademik sesuai norma yang berlaku di Universitas Logistik dan Bisnis In- ternasional.
+
+Bandung, ........................2026
+
+MUHAMMAD MAFTUH
+
+NPM. 613230021 iii
+
+\subsection*{HALAMAN PERSEMBAHAN}
+Tugas Akhir ini saya persembahkan kepada:
+
+Orang tua dan keluarga tercinta atas doa, kasih sayang, dan dukungan yang tiada henti.
+
+Serta seluruh rekan seperjuangan DIII Teknik Informatika ULBI.
+
+iv
+
+\subsection*{PEDOMAN PENGGUNAAN TUGAS AKHIR}
+Tugas Akhir DIII yang tidak dipublikasikan, terdaftar di Perpustakaan Uni- versitas Logistik dan Bisnis Internasional, dan terbuka untuk umum dengan keten- tuan bahwa hak cipta ada pada pengarang. Referensi kepustakaan diperkenankan dicatat, tetapi pengutipan atau peringkasan hanya dapat dilakukan seizin pengarang dan harus disertai dengan kebiasaan ilmiah untuk menyebutkan sumbernya.
+
+Memperbanyak atau menerbitkan sebagian atau seluruh isi Tugas Akhir ha- ruslah seizin dari Rektor Universitas Logistik dan Bisnis Internasional.
+
+Perpustakaan yang meminjam Tugas Akhir ini untuk keperluan anggotanya harus mengisi nama dan tanda tangan peminjam serta tanggal pinjam.
+
+Sitasi pustaka untuk Tugas Akhir ini dapat dituliskan sebagai berikut:
+
+Maftuh, M. (2026). Nalar AI: Pengembangan Ruang Kerja Penulisan
+
+Jurnal Berbantuan AI dengan Agentic Writing, Sitasi Multi-Format, dan Ekspor Typeset LATEX. Laporan Tugas Akhir, Program Studi DIII
+
+Teknik Informatika, Sekolah Teknologi Informasi, Universitas Logistik dan Bisnis Internasional, Bandung.
+
+v
+
+\subsection*{KATA PENGANTAR}
+Puji syukur penulis panjatkan ke hadirat Allah SWT, karena atas rahmat dan karunia-Nya penulis dapat menyelesaikan Laporan Tugas Akhir yang berjudul ""Na- lar AI: Pengembangan Ruang Kerja Penulisan Jurnal Berbantuan AI dengan
+
+Agentic Writing, Sitasi Multi-Format, dan Ekspor Typeset LATEX"" tepat pada waktunya. Penulisan Laporan Tugas Akhir ini dilakukan guna memenuhi salah satu syarat kelulusan dalam meraih gelar Ahli Madya (A.Md.) pada Program Studi DIII
+
+Teknik Informatika, Sekolah Teknologi Informasi, Universitas Logistik dan Bisnis
+
+Internasional (ULBI) Bandung.
+
+Sistem Nalar AI dirancang sebagai ruang kerja penulisan jurnal berbantuan
+
+AI yang memadukan tiga mekanisme: manajemen referensi jurnal dengan unggah- an berkas PDF dan ekstraksi metadata otomatis memakai Large Language Model
+
+(LLM), agentic writing pada modul Co-Writer yang membaca seluruh referensi grup laporan dan isi draf untuk menyusun bab utuh beserta sitasi {[}n{]}, serta pratinjau rapi ala LATEX dan ekspor berkualitas ke LATEX, PDF, dan DOCX yang memperta- hankan struktur heading, tabel, gambar, dan daftar pustaka.
+
+Dalam penyusunan Tugas Akhir ini, penulis mendapatkan dorongan, bim- bingan, serta bantuan dari berbagai pihak. Oleh karena itu, penulis ingin menyam- paikan rasa terima kasih dan penghargaan yang sebesar-besarnya kepada:
+
+\begin{enumerate}
+\item Bapak Muhammad Ruslan Maulani, S.Kom., M.T., selaku Dosen Pembim- bing Utama yang telah memberikan arahan teknis, koreksi mendalam, dan wawasan berharga selama proses penelitian.
+\item Ibu Widia Resdiana, S.S., M.Pd., selaku Dosen Pembimbing Pendamping yang telah memberikan masukan dari segi tata bahasa, struktur laporan, dan sistematika penulisan akademis.
+\item Seluruh Dosen dan Staf Pengajar Program Studi DIII Teknik Informatika Se- kolah Teknologi Informasi ULBI yang telah mendidik dan memberikan ilmu pengetahuan selama masa studi.
+\item Kedua Orang Tua dan Keluarga tercinta yang senantiasa memberikan doa, motivasi, moral, serta dukungan ﬁnansial yang tidak terhingga.
+\item Rekan-rekan mahasiswa DIII Teknik Informatika angkatan 2023 yang telah berbagi semangat, bantuan teknis, dan kerja sama selama perkuliahan.
+\end{enumerate}
+vi
+
+Penulis menyadari bahwa Laporan Tugas Akhir ini masih jauh dari kesem- purnaan. Oleh karena itu, penulis sangat mengharapkan kritik dan saran yang mem- bangun dari para pembaca demi perbaikan di masa mendatang. Akhir kata, semoga laporan ini dapat memberikan manfaat akademis maupun praktis bagi pengembang- an teknologi sistem pembelajaran cerdas.
+
+Bandung, ........................2026
+
+Muhammad Maftuh
+
+NPM. 613230021 vii
+
+\subsection*{NALAR AI: PENGEMBANGAN RUANG KERJA PENULISAN}
+\subsection*{JURNAL BERBANTUAN AI DENGAN AGENTIC WRITING, SITASI MULTI-FORMAT, DAN EKSPOR TYPESET LATEX}
+ABSTRAK
+
+Penulisan laporan penelitian dan artikel jurnal pada pendidikan tinggi masih ba- nyak dilakukan secara manual dan terpisah-pisah: referensi dibaca pada aplikasi pembaca dokumen, draf ditulis pada pengolah kata, sitasi dan daftar pustaka disu- sun dengan mengetik ulang metadata secara manual, dan bantuan AI yang tersedia umum tidak membaca isi dokumen referensi milik penulis sehingga jawabannya ti- dak dapat dirujuk balik. Penelitian ini mengembangkan Nalar AI, sebuah ruang kerja penulisan jurnal berbantuan AI yang memadukan tiga komponen: (1) mana- jemen referensi jurnal berupa unggahan berkas PDF (maksimal 25 MB), ekstraksi metadata otomatis (judul, penulis, tahun, jurnal, DOI) memakai Large Language
+
+Model (LLM) yang dijalankan sebagai tugas latar, pengelompokan per grup lapor- an, dan pembangkit sitasi dalam tujuh format baku (IEEE, APA, MLA, Chicago,
+
+Harvard, Vancouver, SNI) sebagai fungsi murni Python tanpa pemanggilan LLM;
+
+(2) agentic writing pada modul Co-Writer yang membaca seluruh referensi grup laporan aktif dan keseluruhan isi draf untuk menyusun bab utuh dengan penanda sitasi {[}n{]} yang ditambatkan ke daftar pustaka, dengan konﬁrmasi sebelum diterapk- an; serta (3) pratinjau rapi ala LaTeX dan ekspor berkualitas ke LATEX (.tex), PDF
+
+(dikompilasi dengan tectonic), dan DOCX dengan tautan DOI aktif yang mem- pertahankan struktur heading, tabel, gambar, dan daftar pustaka.
+
+Arsitektur sistem dibangun memakai FastAPI dan SQLAlchemy asinkron pada backend dengan basis data SQLite, serta Next.js dan React pada frontend.
+
+Berkas referensi diurai memakai PyMuPDF untuk PDF, sedangkan impor laporan ke Co-Writer menerima berkas .md, .txt, .docx, dan .pdf (maksimal 10 MB) dengan python-docx, termasuk ekstraksi gambar ke direktori media. Generator sitasi diimplementasikan sebagai fungsi deterministik sehingga pembangkitan ber- jalan instan dan konsisten antarmetode. Fitur pendukung yang turut diimplementa- sikan adalah daftar isi otomatis dari heading H1-H3, penyisipan sitasi cepat melalui trigger {[}{[}, analisis kesenjangan struktur terhadap delapan bagian baku artikel ilmi- ah, serta deteksi kalimat klaim tanpa sitasi berbasis pencocokan pola. Checkpoint versi dokumen tersedia pada sisi peladen dan belum memiliki antarmuka riwayat versi pada sisi klien.
+
+Pengujian fungsionalitas black box atas empat belas kasus uji inti (ung- gah PDF jurnal, impor laporan, ekstraksi metadata, generator sitasi tujuh format, penyimpanan sitasi, pencarian jurnal, agentic writing, ekspor LATEX/PDF/DOCX, quick-cite, checkpoint, pemeriksaan struktur, pemeriksaan sitasi, dan pratinjau rapi) seluruhnya berhasil sesuai harapan; uji otomatis pytest lulus 34 dari 34 kasus pada sisi backend dan tsc -noEmit tanpa galat pada sisi frontend. Penelitian menyimpulkan bahwa penggabungan manajemen referensi, penulisan agentic, sita- viii si multi-format, dan ekspor berkualitas dalam satu ruang kerja menghasilkan asisten penulisan jurnal yang menuntaskan alur dari pengumpulan referensi hingga berkas siap kumpul.
+
+Kata Kunci: Retrieval-Augmented Generation, Agentic AI, Agentic Writing, Sis- tem Sitasi, Typesetting, LATEX, Nalar AI.
+
+\subsection*{NALAR AI: PENGEMBANGAN RUANG KERJA PENULISAN}
+\subsection*{JURNAL BERBANTUAN AI DENGAN AGENTIC WRITING, SITASI MULTI-FORMAT, DAN EKSPOR TYPESET LATEX}
+ABSTRACT
+
+Writing research reports and journal articles in higher education is still largely do- ne manually and in a fragmented way: references are read in document readers, drafts are written in word processors, citations and bibliographies are assembled by retyping metadata by hand, and commonly available AI assistants do not read the author's own reference documents, so their answers cannot be traced back to a source. This research develops Nalar AI, an AI-assisted journal writing workspace that combines three components: (1) journal reference management for uploading
+
+PDF ﬁles (up to 25 MB), automatic metadata extraction (title, authors, year, jour- nal, DOI) using a Large Language Model (LLM) executed as a background task, grouping by report, and a citation generator supporting seven standard formats (IE-
+
+EE, APA, MLA, Chicago, Harvard, Vancouver, SNI) implemented as pure Python functions without any LLM call; (2) agentic writing in the Co-Writer module that reads all references of the active report group and the entire current draft to produ- ce complete chapters with citation markers {[}n{]} anchored to the bibliography, with conﬁrmation before applying; and (3) LaTeX-style typeset preview and high-quality export to LaTeX (.tex), PDF (compiled with tectonic), and DOCX with active
+
+DOI hyperlinks, preserving the structure of headings, tables, ﬁgures, and bibliogra- phies.
+
+The system architecture is built with FastAPI and asynchronous SQLAlche- my on the backend using a SQLite database, and Next.js with React on the fron- tend. Reference ﬁles are parsed with PyMuPDF, while report import into Co-Writer accepts .md, .txt, .docx, and .pdf ﬁles (up to 10 MB) using python-docx, including image extraction to a media directory. The citation generator is imple- mented as a deterministic function so generation is instant and consistent across styles. Supporting features also implemented include an automatic table of con- tents from H1-H3 headings, quick citation insertion via the {[}{[} trigger, structure gap analysis against eight standard sections of a scientiﬁc article, and pattern-based detection of claim sentences without citations. Document version checkpoints are available on the server side and do not yet have a version-history interface on the client side.
+
+ix
+
+Black-box functional testing of fourteen core test cases (journal PDF uplo- ad, report import, metadata extraction, seven-format citation generation, citation sa- ving, journal search, agentic writing, LaTeX/PDF/DOCX export, quick-cite, chec- kpoints, structure checking, citation checking, and typeset preview) all passed as expected; automated pytest tests passed 34 of 34 cases on the backend and tsc
+
+-noEmit reported no errors on the frontend. The research concludes that combi-
+
+ning reference management, agentic writing, multi-format citation, and high-quality export in a single workspace yields a journal-writing assistant that completes the workﬂow from reference collection to a submission-ready document.
+
+Keywords: Retrieval-Augmented Generation, Agentic AI, Agentic Writing, Cita- tion System, Typesetting, LaTeX, Nalar AI.
+
+x
+
+\subsection*{DAFTAR ISI}
+DAFTAR TABEL . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . xiii
+
+DAFTAR GAMBAR . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . xiv
+
+DAFTAR NOTASI
+
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+xv
+
+Bab 1
+
+PENDAHULUAN . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+1
+
+1.1
+
+Latar Belakang . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+1
+
+1.2
+
+Rumusan Masalah . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+2
+
+1.3
+
+Tujuan Penelitian
+
+. . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+2
+
+1.4
+
+Batasan Masalah . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+3
+
+1.5
+
+Sistematika Penulisan . . . . . . . . . . . . . . . . . . . . . . . . .
+
+3
+
+Bab 2
+
+TINJAUAN PUSTAKA . . . . . . . . . . . . . . . . . . . . . . . .
+
+4
+
+2.1
+
+Kajian Pustaka . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+4
+
+2.2
+
+Large Language Model dan Arsitektur Transformer
+
+. . . . . . . . .
+
+6
+
+2.3
+
+Retrieval-Augmented Generation (RAG) . . . . . . . . . . . . . . .
+
+6
+
+2.4
+
+Agentic AI dan Pemanggilan Perkakas (Tool Calling) . . . . . . . .
+
+6
+
+2.5
+
+Sistem Sitasi Akademik dan Format Referensi . . . . . . . . . . . .
+
+7
+
+2.6
+
+Typesetting dan Format LATEX . . . . . . . . . . . . . . . . . . . . .
+
+7
+
+2.7
+
+Landasan Perangkat Lunak dan Teknologi
+
+. . . . . . . . . . . . . .
+
+7
+
+2.8
+
+Pengujian Perangkat Lunak . . . . . . . . . . . . . . . . . . . . . .
+
+8
+
+Bab 3
+
+ANALISA DAN PERANCANGAN
+
+. . . . . . . . . . . . . . . . .
+
+9
+
+3.1
+
+Analisis Sistem
+
+. . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+9
+
+Analisis Sistem Berjalan (Current System) . . . . . . . . . . . .
+
+3.1.1
+
+9
+
+3.1.2
+
+Analisis Sistem yang akan Dibangun . . . . . . . . . . . . . . .
+
+9
+
+3.1.3
+
+Analisis Kebutuhan Sistem . . . . . . . . . . . . . . . . . . . .
+
+10
+
+3.1.4
+
+Pemodelan Sistem
+
+. . . . . . . . . . . . . . . . . . . . . . . .
+
+12
+
+3.2
+
+Perancangan Sistem . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+16
+
+Entity Relationship Diagram (ERD) . . . . . . . . . . . . . . .
+
+3.2.1
+
+16
+
+3.2.2
+
+Kamus Data . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+17
+
+3.2.3
+
+Perancangan Algoritma . . . . . . . . . . . . . . . . . . . . . .
+
+18
+
+Perancangan Antar Muka (User Interface) . . . . . . . . . . . .
+
+3.2.4
+
+20
+
+Bab 4
+
+IMPLEMENTASI DAN PENGUJIAN . . . . . . . . . . . . . . . .
+
+21
+
+4.1
+
+Implementasi . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+21
+
+4.1.1
+
+Lingkungan Implementasi
+
+. . . . . . . . . . . . . . . . . . . .
+
+21
+
+4.1.2
+
+Implementasi Modul Manajemen Referensi . . . . . . . . . . .
+
+22 xi
+
+4.1.3
+
+Implementasi Modul Co-Writer
+
+. . . . . . . . . . . . . . . . .
+
+23
+
+4.1.4
+
+Implementasi Pratinjau Rapi dan Pemeriksaan Draf . . . . . . .
+
+25
+
+4.1.5
+
+Implementasi Agentic Write dan Ekspor . . . . . . . . . . . . .
+
+27
+
+4.1.6
+
+Implementasi Halaman Pendukung . . . . . . . . . . . . . . . .
+
+28
+
+4.2
+
+Pengujian
+
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+30
+
+4.2.1
+
+Lingkungan Pengujian
+
+. . . . . . . . . . . . . . . . . . . . . .
+
+30
+
+4.2.2
+
+Hasil Pengujian . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+30
+
+4.2.3
+
+Perbaikan Cacat yang Ditemukan Saat Pengujian . . . . . . . .
+
+32
+
+Bab 5
+
+PENUTUP . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+33
+
+5.1
+
+Kesimpulan
+
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+33
+
+5.2
+
+Keterbatasan Sistem . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+34
+
+5.3
+
+Saran . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+34
+
+DAFTAR PUSTAKA . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+36
+
+LAMPIRAN A: KODE SUMBER MODUL INTI . . . . . . . . . . . . . . .
+
+38 xii
+
+\subsection*{DAFTAR TABEL}
+Tabel 2-1
+
+Matriks Perbandingan Penelitian Terdahulu dan Nalar AI . . . .
+
+5
+
+Tabel 3-1
+
+Kebutuhan Fungsional Sistem
+
+. . . . . . . . . . . . . . . . . .
+
+11
+
+Tabel 3-2
+
+Use Case: Agentic Write . . . . . . . . . . . . . . . . . . . . .
+
+15
+
+Tabel 3-3
+
+Use Case: Ekspor Dokumen
+
+. . . . . . . . . . . . . . . . . . .
+
+16
+
+Kamus Data journal\_references . . . . . . . . . . . . .
+
+Tabel 3-4
+
+18
+
+Tabel 4-1
+
+Hasil Pengujian Fungsional . . . . . . . . . . . . . . . . . . . .
+
+31 xiii
+
+\subsection*{DAFTAR GAMBAR}
+Use Case Diagram Sistem Nalar AI
+
+Gambar 3-1
+
+. . . . . . . . . . . . . .
+
+12
+
+Sequence Diagram Agentic Write . . . . . . . . . . . . . . . .
+
+Gambar 3-2
+
+13
+
+Sequence Diagram Ekspor Dokumen . . . . . . . . . . . . . .
+
+Gambar 3-3
+
+14
+
+Activity Diagram Unggah Referensi dan Ekstraksi Metadata . .
+
+Gambar 3-4
+
+15
+
+Entity Relationship Diagram Sistem Nalar AI
+
+Gambar 3-5
+
+. . . . . . . . .
+
+17
+
+Gambar 4-1
+
+Arsitektur Penerapan Sistem Nalar AI
+
+. . . . . . . . . . . . .
+
+22
+
+Gambar 4-2
+
+Halaman Referensi Jurnal . . . . . . . . . . . . . . . . . . . .
+
+23
+
+Gambar 4-3
+
+Halaman Co-Writer (Daftar Dokumen) . . . . . . . . . . . . .
+
+24
+
+Gambar 4-4
+
+Editor Co-Writer Tiga Kolom . . . . . . . . . . . . . . . . . .
+
+24
+
+Gambar 4-5
+
+Daftar Isi Otomatis dari Heading Dokumen . . . . . . . . . . .
+
+25
+
+Pratinjau Rapi (Typeset Preview) . . . . . . . . . . . . . . . .
+
+Gambar 4-6
+
+25
+
+Gambar 4-7
+
+Hasil Pemeriksaan Kelengkapan Struktur . . . . . . . . . . . .
+
+26
+
+Gambar 4-8
+
+Hasil Pemeriksaan Sitasi dan Konsistensi Istilah . . . . . . . .
+
+27
+
+Gambar 4-9
+
+Panel Agentic Write . . . . . . . . . . . . . . . . . . . . . . .
+
+28
+
+Gambar 4-10 Dashboard Nalar AI . . . . . . . . . . . . . . . . . . . . . . .
+
+29
+
+Gambar 4-11 Learning Space
+
+. . . . . . . . . . . . . . . . . . . . . . . . .
+
+29
+
+Gambar 4-12 Halaman Pengaturan Model LLM . . . . . . . . . . . . . . . .
+
+30 xiv
+
+\subsection*{DAFTAR NOTASI A. Daftar Notasi Diagram}
+Notasi berikut dipakai pada diagram use case, sequence, activity, dan ERD di Bab
+
+3 serta diagram arsitektur di Bab 4.
+
+Notasi
+
+Nama
+
+Keterangan
+
+Use case
+
+Satu fungsi sistem yang dapat dijalankan aktor
+
+Aktor, komponen, atau
+
+Pihak atau modul yang berinte- lifeline raksi dengan sistem
+
+Aksi (activity)
+
+Satu langkah pemrosesan pada diagram aktivitas
+
+Putusan (decision)
+
+Percabangan bersyarat dengan keluaran ya/tidak tabel
+
+Entitas
+
+Tabel basis data beserta daftar kolom kolomnya
+
+Panah utuh
+
+Aliran kendali, pesan permin- taan, atau relasi ON DELETE
+
+CASCADE
+
+Pesan balasan, relasi include,
+
+Panah putus-putus atau ON DELETE SET NULL
+
+Garis hayat (lifeline)
+
+Rentang waktu hidup objek pa- da diagram sequence
+
+1 ...N
+
+Kardinalitas satu ke ba-
+
+Satu baris induk memiliki nol nyak atau lebih baris anak
+
+0 ...N
+
+Kardinalitas opsional
+
+Relasi boleh kosong (kolom kunci asing bernilai NULL)
+
+{[}n{]}
+
+Penanda sitasi
+
+Nomor rujukan pada draf; no- mornya divalidasi sistem dan tertambat ke daftar pustaka xv
+
+\subsection*{B. Daftar Singkatan}
+Singkatan
+
+Kepanjangan
+
+Artiﬁcial Intelligence
+
+AI
+
+Large Language Model
+
+LLM
+
+Retrieval-Augmented Generation
+
+RAG
+
+Portable Document Format
+
+PDF
+
+Microsoft Word Open XML Document
+
+DOCX
+
+Digital Object Identiﬁer
+
+DOI
+
+Institute of Electrical and Electronics Engineers
+
+IEEE
+
+American Psychological Association
+
+APA
+
+Modern Language Association
+
+MLA
+
+Standar Nasional Indonesia
+
+SNI
+
+User Interface
+
+UI
+
+Uniﬁed Modeling Language
+
+UML
+
+Entity Relationship Diagram
+
+ERD
+
+Structured Query Language
+
+SQL
+
+Application Programming Interface
+
+API
+
+Representational State Transfer
+
+REST
+
+Server-Sent Events
+
+SSE
+
+JavaScript Object Notation
+
+JSON
+
+Universally Unique Identiﬁer
+
+UUID
+
+Foreign Key (kunci asing)
+
+FK
+
+Optical Character Recognition
+
+OCR
+
+Table of Contents
+
+TOC xvi
+
+\subsection*{Bab 1 PENDAHULUAN 1.1 Latar Belakang}
+Penulisan laporan penelitian dan artikel jurnal pada pendidikan tinggi saat ini masih banyak dilakukan secara manual dan terpisah-pisah. Mahasiswa maupun peneliti dihadapkan pada serangkaian perkakas yang tidak saling terhubung: pem- baca dokumen untuk mempelajari referensi, aplikasi pengolah kata untuk menulis draf, mesin pencari untuk menemukan pustaka, serta perangkat terpisah untuk me- nyusun daftar pustaka dan memformat sitasi. Alur yang terpecah tersebut memakan waktu dan rawan inkonsistensi, terutama pada tahap penyusunan sitasi dan daftar pustaka yang memiliki banyak format baku (IEEE, APA, MLA, Chicago, Harvard,
+
+Vancouver, SNI) {[}8, 10{]}.
+
+Pertumbuhan Large Language Model (LLM) berbasis arsitektur Transfor- mer {[}3{]} membuka peluang mengotomatisasi sebagian besar pekerjaan tersebut. Na- mun LLM yang dipakai berdiri sendiri memiliki keterbatasan berupa halusinasi, yaitu keluaran yang terbaca meyakinkan tetapi tidak tertambat pada sumber acuan
+
+{[}7{]}. Pada konteks penulisan akademik, halusinasi berbahaya: penulis yang menyi- tasi rujukan ﬁktif dapat merusak kredibilitas karya tanpa menyadarinya.
+
+Pendekatan Retrieval-Augmented Generation (RAG) menjawab keterba- tasan tersebut dengan menyisipkan potongan dokumen hasil pencarian ke dalam prompt sebelum LLM menyusun jawaban, sehingga keluaran tertambat pada sum- ber yang dapat dirujuk balik {[}1{]}. Perkembangan RAG diklasiﬁkasikan menjadi Na- ive RAG, Advanced RAG, dan Modular RAG {[}2{]}. Pada konteks penulisan jurnal,
+
+RAG dipakai untuk membuat asisten yang membaca seluruh referensi yang diung- gah pengguna (PDF jurnal, DOCX laporan) lalu menjawab pertanyaan disertai ru- jukan {[}8, 9{]}.
+
+Selain RAG, paradigma agentic AI memberi model kemampuan menyelang- seling penalaran dan aksi (reasoning-acting loop), memilih perkakas yang perlu dipanggil, membaca hasilnya, lalu memutuskan langkah berikutnya sampai tugas dianggap selesai {[}4, 5, 6{]}. Dalam penulisan jurnal, perilaku agenik ini diwujudk- an sebagai agentic writing: pengguna memberi perintah menulis satu bab, sistem membaca seluruh referensi pada grup laporan aktif, membaca keseluruhan isi do- kumen yang sedang dikerjakan, lalu menyusun draf beserta sitasi otomatis {[}12{]}.
+
+Berdasarkan uraian tersebut, penelitian ini mengembangkan Nalar AI, se-
+
+1
+
+2 buah ruang kerja penulisan jurnal berbantuan AI dengan empat fokus utama: (1) manajemen referensi jurnal berupa unggahan berkas PDF, ekstraksi metadata oto- matis, pengelompokan per laporan, dan pembangkitan sitasi dalam tujuh format baku; (2) assistant penulisan pada modul Co-Writer yang menyatukan editor mar- kdown, pratinjau rapi ala LATEX, panel percakapan riset, dan jendela referensi dalam satu layar; (3) agentic writing yang membaca seluruh materi referensi dan isi draf untuk menghasilkan bab utuh dengan sitasi tertanam; serta (4) ekspor berkualitas ke LATEX, PDF, dan DOCX dengan pemformatan heading, gambar, tabel, dan daftar pustaka yang terjaga.
+
+\subsection*{1.2 Rumusan Masalah}
+Berdasarkan latar belakang di atas, rumusan masalah pada penelitian ini adalah sebagai berikut:
+
+\begin{enumerate}
+\item Bagaimana merancang dan membangun sistem manajemen referensi jurnal yang mampu menerima unggahan berkas PDF, mengekstrak metadata secara otomatis, dan membangkitkan sitasi dalam tujuh format baku akademik?
+\item Bagaimana merancang agentic writing pada Co-Writer yang membaca selu- ruh referensi grup dan keseluruhan isi draf sehingga menghasilkan bab utuh beserta sitasi yang ditambatkan pada daftar pustaka?
+\item Bagaimana merancang pratinjau rapi (typeset preview) ala LATEX dan ekspor berkas PDF/DOCX yang mempertahankan struktur heading, tabel, gambar, dan daftar pustaka?
+\end{enumerate}
+\subsection*{1.3 Tujuan Penelitian}
+Sesuai rumusan masalah, tujuan penelitian ini adalah:
+
+\begin{enumerate}
+\item Membangun sistem manajemen referensi jurnal dengan unggah PDF, ekstrak- si metadata otomatis, pengelompokan per grup laporan, dan pembuatan sitasi tujuh format.
+\item Menerapkan alur agentic writing pada modul Co-Writer yang membaca refe- rensi dan isi draf untuk menuliskan bab beserta sitasi otomatis yang tertambat.
+\item Mewujudkan pratinjau ketikan rapi ala
+\end{enumerate}
+LATEX dan ﬁtur ekspor
+
+(LATEX/PDF/DOCX) yang mempertahankan struktur dan format akade- mik.
+
+3
+
+\subsection*{1.4 Batasan Masalah}
+Batasan masalah penelitian ini adalah sebagai berikut:
+
+\begin{enumerate}
+\item Berkas referensi jurnal yang dapat diunggah dibatasi pada format PDF ber- ukuran maksimal 25 MB; berkas laporan untuk diimpor ke Co-Writer men- dukung format .md, .txt, .docx, dan .pdf berukuran maksimal 10 MB.
+\end{enumerate}
+Berkas hasil pindai (scan) tanpa lapisan teks tidak dapat diekstrak metadata- nya secara otomatis dan harus diisi manual.
+
+\begin{enumerate}
+\item Format sitasi yang dibangkitkan adalah IEEE, APA, MLA, Chicago, Harvard,
+\end{enumerate}
+Vancouver, dan SNI.
+
+\begin{enumerate}
+\item Percakapan riset dan penulisan agenik menggunakan model LLM hasil kon- ﬁgurasi pengguna.
+\item Pengujian difokuskan pada modul autentikasi, manajemen referensi, genera- tor sitasi, Co-Writer (agentic writing, pratinjau rapi, pemeriksaan draf, eks- por), dan integrasi daftar pustaka.
+\item Riset pustaka pendukung dibatasi lima tahun terakhir (2021-2026).
+\end{enumerate}
+\subsection*{1.5 Sistematika Penulisan}
+Sistematika penulisan laporan penelitian ini adalah sebagai berikut:
+
+BAB 1 PENDAHULUAN Memuat latar belakang, rumusan masalah, tujuan, batasan, dan sistematika penulisan.
+
+B 2 TINJAUAN PUSTAKA Mengkaji teori dan penelitian terdahulu, yang meliputi Large Language Mo- del, Retrieval-Augmented Generation, agentic AI, sistem sitasi akademik, dan teknologi pengembangan yang digunakan.
+
+SA DAN PERANCANGAN Memuat analisis sistem berjalan dan sistem yang akan dibangun, analisis ke- butuhan, hingga perancangan basis data, algoritma ekstraksi metadata, algo- ritma generator sitasi, alur agentic writing, dan perancangan antar muka.
+
+ENTASI DAN PENGUJIAN Menjelaskan implementasi setiap modul dan hasil pengujian fungsi-fungsi sistem yang dikembangkan.
+
+BAB 5 PENUTUP Merangkum kesimpulan dan saran pengembangan.
+
+\subsection*{Bab 2 TINJAUAN PUSTAKA 2.1}
+\subsection*{Kajian Pustaka}
+Retrieval-
+
+Penelitian ini berpijak pada tiga rumpun studi terdahulu:
+
+Augmented Generation (RAG) untuk penambatan jawaban pada dokumen, agentic
+
+AI berbasis pemanggilan perkakas (tool calling) untuk otomatisasi penulisan, serta sistem sitasi akademik dan typesetting untuk publikasi ilmiah. Tabel 2-1 menyajik- an perbandingan penelitian relevan dengan pendekatan yang diterapkan pada Nalar
+
+AI.
+
+4
+
+5
+
+Tabel 2-1
+
+Matriks Perbandingan Penelitian Terdahulu dan Nalar AI
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lllll}
+\toprule
+No & Peneliti \& Tahun & Topik / Metode & Hasil Utama & Perbedaan dengan Nalar AI \\
+\midrule
+--- & --- & --- & --- & --- \\
+1 & Lewis et al. (2020) {[}1{]} & Retrieval- Augmented Generation for Knowledge- Intensive NLP Tasks & Penggabungan memori parametrik dan non-parametrik menurunkan halusinasi pada QA & Berfokus pada arsitektur RAG untuk tugas NLP umum; tanpa manajemen referensi akademik \\
+2 & Gao et al. (2023) {[}2{]} & Survei RAG untuk LLM (Naive, Advanced, Modular RAG) & Klasifikasi evolusi arsitektur RAG & Berupa kajian literatur; Nalar AI mengimplementa- sikan RAG modular untuk dokumen jurnal \\
+3 & Yao et al. (2023) {[}4{]} & ReAct: penyelangan penalaran dan aksi pada LLM & Gelung reasoning-acting meningkatkan keandalan tugas multi-langkah & Kerangka umum; Nalar AI menerapkannya pada perkakas dokumen dan penulisan jurnal \\
+4 & Sari \& Wijaya (2022) {[}8{]} & Penerapan RAG untuk chatbot pendidikan & Akurasi jawaban chatbot pendidikan meningkat dengan RAG & Fokus chatbot tanya-jawab; Nalar AI menambahkan generator sitasi dan penulisan agenik \\
+5 & Hidayat \& Nugraha (2023) {[}9{]} & Tanya jawab dokumen dengan RAG dan embedding & Sistem menjawab dengan rujukan dokumen & Tidak memiliki modul penulisan (Co-Writer) maupun ekspor berkas akademik \\
+6 & Rahman \& Kurniawan (2023) {[}10{]} & LLM pada pembelajaran adaptif perguruan tinggi & LLM mempercepat adaptasi materi & Tidak mencakup pipeline sitasi dan ekspor berkualitas publikasi \\
+\bottomrule
+\end{tabular}
+\end{table}
+7
+
+Maulana \&
+
+Sistem agen cerdas
+
+Agen AI
+
+Studi kasus laporan
+
+Puspitasari untuk penulisan membantu proyek; Nalar AI
+
+(2026) {[}12{]} laporan tugas akhir menyusun laporan menambahkan dengan otomatisasi manajemen referensi dan sitasi
+
+6
+
+Berdasarkan Tabel 2-1, kebaruan (novelty) penelitian ini terletak pada pe- nyatuan manajemen referensi jurnal, penulisan agentic yang membaca seluruh ma- teri dan draf, sitasi multi-format otomatis, serta ekspor ke LATEX/PDF/DOCX dalam satu ruang kerja, yang pada studi terdahulu dibahas terpisah.
+
+\subsection*{2.2 Large Language Model dan Arsitektur Transformer}
+Large Language Model (LLM) adalah model jaringan saraf yang dilatih pa- da korpus teks berskala sangat besar untuk mempelajari pola bahasa {[}3{]}. Arsitek- tur Transformer memperkenalkan mekanisme attention yang memungkinkan mo- del menimbang relevansi antarkata dalam kalimat secara paralel, sehingga menjadi fondasi model-model seperti GPT dan LLaMA {[}3{]}. Pada Nalar AI, LLM dipakai se- bagai mesin ekstraksi metadata dokumen, generator sitasi kontekstual, dan penulis draf pada gelung agentic writing. Kapabilitas model dikonﬁgurasi oleh pengguna melalui halaman pengaturan model (endpoint, kunci API, nama model).
+
+\subsection*{2.3 Retrieval-Augmented Generation (RAG)}
+Retrieval-Augmented Generation (RAG) menyisipkan potongan dokumen hasil pencarian ke dalam prompt sebelum LLM menyusun jawaban sehingga kelu- aran tertambat pada sumber yang dapat dirujuk {[}1{]}. Evolusi RAG mencakup Naive
+
+RAG, Advanced RAG, dan Modular RAG, di mana varian modular memungkinkan pencarian dilakukan berulang dan dikendalikan logika aplikasi {[}2{]}. Pada Nalar AI,
+
+RAG dipakai untuk menjawab pertanyaan atas isi referensi jurnal berkas PDF yang diunggah pengguna dengan menambatkan jawaban ke paragraf dokumen asal {[}8, 9{]}.
+
+\subsection*{2.4 Agentic AI dan Pemanggilan Perkakas (Tool Calling)}
+Paradigma agentic AI memberi model kemampuan menyelang-seling pe- nalaran dan aksi (reasoning-acting loop), memilih perkakas yang perlu dipanggil, membaca hasilnya, lalu memutuskan langkah berikutnya secara mandiri sampai tu- gas dianggap selesai {[}4, 5, 6{]}. Pada Nalar AI, perilaku agenik diterapkan pada modul agentic writing: model membaca seluruh referensi grup laporan aktif dan keseluruhan isi draf, lalu menyusun bab utuh dengan penanda sitasi {[}n{]} yang ditam- batkan ke daftar pustaka {[}12{]}.
+
+7
+
+\subsection*{2.5 Sistem Sitasi Akademik dan Format Referensi}
+Sitasi adalah aturan merujuk sumber karya ilmiah yang bertujuan mem- beri penghargaan dan memudahkan penelusuran {[}11{]}. Terdapat beberapa format baku yang umum dipakai: IEEE (nomor berurutan {[}1{]}, {[}2{]}, ...), APA 7th
+
+(penulis-tahun), MLA, Chicago (notes-bibliography), Harvard, Vancouver, dan ga- ya Indonesia (SNI) {[}11, 8{]}. Pembangkitan sitasi secara otomatis menuntut metada- ta lengkap (penulis, tahun, judul, jurnal, volume, nomor, halaman, DOI, penerbit) yang umumnya diekstrak dari halaman judul berkas PDF atau direktori word/ pada
+
+DOCX.
+
+\subsection*{2.6 Typesetting dan Format LATEX}
+Typesetting adalah proses mengatur tipograﬁdokumen agar sesuai standar publikasi, mencakup margin, penomoran bab/sub-bab, penomoran gambar/tabel de- ngan caption, header/footer, dan nomor halaman {[}13{]}. LATEX adalah sistem penyi- apan dokumen berbasis markup yang banyak dipakai untuk makalah ilmiah karena penanganan rumus, tabel, dan bibliograﬁyang rapi {[}13{]}. Pada Nalar AI, pratinjau rapi (typeset preview) merender draf markdown menjadi tampilan ala LATEX dengan penomoran otomatis, dan ekspor berkualitas dilakukan ke LATEX (.tex) ataupun berkas PDF/DOCX yang mempertahankan struktur.
+
+\subsection*{2.7 Landasan Perangkat Lunak dan Teknologi}
+Sistem Nalar AI dikembangkan dengan arsitektur full-stack:
+
+• Frontend: Next.js (React) untuk antarmuka ruang kerja, editor markdown
+
+Co-Writer, panel percakapan riset, panel referensi, dan halaman manajemen jurnal.
+
+• Backend: FastAPI (Python) menyediakan REST API, autentikasi, manaje- men berkas, generator sitasi (fungsi murni Python), serta orkestrasi LLM.
+
+• Basis data: SQLite (melalui SQLAlchemy) untuk tabel pengguna, grup la- poran, referensi jurnal, kategori sitasi, dokumen Co-Writer, dan checkpoint versi.
+
+• Model LLM: Diperoleh dari penyedia OpenAI-compatible yang dikonﬁgu- rasi pengguna (mis. tokenrouter atau gateway lokal) {[}10{]}.
+
+8
+
+• Parsing dokumen: PyMuPDF (fitz) untuk PDF dan python-docx un- tuk DOCX, termasuk ekstraksi gambar dan metadata.
+
+Atas dasar tersebut, pengembangan Nalar AI menjadi asisten penulisan jurnal yang menautkan manajemen referensi, penulisan agenik, dan sitasi dalam satu ruang ker- ja.
+
+\subsection*{2.8 Pengujian Perangkat Lunak}
+Pengujian dilakukan dengan black-box fungsional terhadap setiap modul:
+
+manajemen referensi (unggah, ekstraksi metadata, pengelompokan), generator sita- si tujuh format, agentic writing, pratinjau/ekspor berkas, dan integrasi daftar pus- taka. Selain itu, dilakukan pengecekan statis tsc -noEmit pada frontend dan pytest pada sisi backend untuk menjamin kestabilan ﬁtur yang sudah berjalan.
+
+\subsection*{Bab 3 ANALISA DAN PERANCANGAN}
+\subsection*{3.1 Analisis Sistem}
+\subsection*{Analisis Sistem Berjalan (Current System)}
+\subsection*{3.1.1}
+Penulisan laporan penelitian dan artikel jurnal pada saat ini dijalankan de- ngan rangkaian perkakas yang tidak saling terhubung. Penulis mengunduh berkas referensi berformat PDF atau DOCX, membacanya secara berurutan memakai pem- baca dokumen, lalu menulis draf pada aplikasi pengolah kata. Ketika menyusun si- tasi, penulis harus mengetik format rujukan secara manual sesuai gaya yang diminta
+
+(IEEE, APA, atau lainnya), memeriksa satu per satu kesesuaian penulis, tahun, jur- nal, dan halaman, kemudian menyusun daftar pustaka secara manual di akhir doku- men. Apabila format sitasi berubah (misalnya diminta berganti dari IEEE ke APA), seluruh penomoran dan penataan daftar pustaka harus dikerjakan ulang.
+
+Alur berjalan tersebut menyisakan empat kelemahan yang menjadi dasar perancangan sistem usulan:
+
+\begin{enumerate}
+\item Pengelolaan referensi manual. Metadata jurnal (penulis, tahun, judul, DOI) diketik ulang secara manual setiap kali digunakan, rawan salah ketik dan tidak konsisten.
+\item Sitasi tidak otomatis. Tidak ada pembangkit sitasi otomatis; penulis meng- hafal atau menyalin format dari sumber lain, sehingga format antarrujukan sering tidak seragam.
+\item Penulisan tidak tertambat referensi. Bantuan AI yang tersedia umum (cha- tbot publik) tidak membaca isi dokumen referensi milik penulis, sehingga jawabannya tidak dapat dirujuk balik ke halaman jurnal tertentu.
+\item Ekspor tidak terjaga formatnya. Hasil ketikan di pengolah kata sering be- rantakan saat dikonversi ke format lain; penomoran bab, gambar, dan tabel tidak otomatis.
+\end{enumerate}
+\subsection*{3.1.2 Analisis Sistem yang akan Dibangun}
+Sistem Nalar AI dirancang sebagai ruang kerja penulisan jurnal berbantuan
+
+AI yang menyatukan kebutuhan tersebut ke dalam satu alur tertutup: unggah re-
+
+9
+
+10 ferensi $\rightarrow$ekstraksi metadata $\rightarrow$pengelompokan per laporan $\rightarrow$penulisan di
+
+Co-Writer dengan bantuan agenik $\rightarrow$sitasi otomatis tujuh format $\rightarrow$ekspor
+
+LATEX/PDF/DOCX.
+
+Referensi yang diunggah berupa berkas PDF diurai untuk diekstrak metadata-nya (judul, penulis, tahun, nama jurnal, volume, nomor, halaman, DOI, penerbit) memakai model LLM, lalu disimpan pada grup laporan yang dibuat pengguna (misalnya ""Laporan A"", ""Laporan B""). Generator sitasi menghasilkan rujukan dalam tujuh format baku (IEEE, APA, MLA, Chicago, Harvard, Vancouver,
+
+SNI) secara instan tanpa panggilan LLM, karena seluruh format diturunkan dari metadata yang sama.
+
+Modul Co-Writer menyediakan editor markdown dengan pratinjau rapi ala
+
+LATEX (penomoran bab, gambar, dan tabel otomatis), panel percakapan riset yang membaca seluruh referensi dan isi draf, serta panel kanan berisi tab Referensi (klik untuk menyisipkan sitasi) dan tab Agentic Write (memberi perintah menulis satu bab; AI membaca seluruh referensi grup dan isi dokumen, lalu menghasilkan draf dengan sitasi {[}n{]} yang harus dikonﬁrmasi pengguna sebelum diterapkan). Ekspor dilakukan ke berkas LATEX, PDF (melalui compiler tectonic), dan DOCX dengan tautan DOI aktif, yang mempertahankan struktur heading, tabel, gambar, dan daftar pustaka.
+
+\subsection*{3.1.3 Analisis Kebutuhan Sistem}
+Kebutuhan fungsional sistem dirinci pada Tabel 3-1.
+
+11
+
+Tabel 3-1
+
+Kebutuhan Fungsional Sistem
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\toprule
+Kode & Kebutuhan & Deskripsi \\
+\midrule
+--- & --- & --- \\
+KF- 01 & Unggah referensi & Sistem dapat menerima unggahan berkas PDF beru- kuran maksimal 25 MB, menyimpannya, dan meng- ekstrak metadata secara otomatis (judul, penulis, ta- hun, jurnal, DOI). \\
+KF- 02 & Kelola grup laporan & Pengguna dapat membuat, mengganti nama, dan menghapus grup laporan, serta memindahkan refe- rensi antargrup. \\
+KF- 03 & Generate sitasi & Sistem membangkitkan sitasi dalam tujuh format (IEEE, APA, MLA, Chicago, Harvard, Vancouver, SNI) dari metadata referensi. \\
+KF- 04 & Simpan sitasi & Pengguna dapat menyimpan sitasi pilihan ke katego- ri (mis. ""Sitasi Bab 2"") dan melihatnya kembali di Learning Space. \\
+KF- 05 & Cari jurnal & Sistem mencari jurnal dari internet (web dan arXiv) dan menyimpannya sebagai referensi. \\
+KF- 06 & Co-Writer & Sistem menyediakan editor markdown dengan pra- tinjau rapi, panel percakapan riset, panel referensi, dan daftar isi otomatis. \\
+KF- 07 & Agentic write & Sistem membaca seluruh referensi grup dan isi draf, menuliskan bab sesuai perintah, dan menampilkan draf untuk konfirmasi. \\
+KF- 08 & Quick-cite & Mengetik {[}{[} pada editor memunculkan pencarian referensi untuk menyisipkan sitasi cepat. \\
+KF- 09 & Checkpoint & Sistem menyimpan snapshot dokumen sebelum per- ubahan besar AI dan menyediakan pemulihan versi. \\
+KF- 10 & Ekspor & Sistem mengekspor draf ke LATEX (.tex), PDF, dan DOCX dengan struktur terjaga. \\
+\bottomrule
+\end{tabular}
+\end{table}
+Kebutuhan non-fungsional meliputi:
+
+kecepatan pembangkitan sita- si kurang dari satu detik (fungsi murni Python);
+
+keamanan akses berbasis get\_current\_user sehingga berkas hanya diakses pemiliknya; ketersediaan bahasa antarmuka Indonesia; serta dukungan berkas referensi PDF hingga 25 MB
+
+12 dan berkas impor laporan (.md, .txt, .docx, .pdf) hingga 10 MB.
+
+\subsection*{3.1.4 Pemodelan Sistem}
+Pemodelan sistem menggunakan UML yang terdiri atas use case diagram, sequence diagram, dan activity diagram. Aktor utama adalah Pengguna (penulis jurnal atau laporan) yang berinteraksi langsung dengan seluruh fungsi sistem, se- dangkan Penyedia LLM berperan sebagai aktor sekunder berupa sistem luar yang dipanggil pada fungsi yang memerlukan model bahasa. Perlu dicatat bahwa tidak semua fungsi memanggil LLM: pembangkitan sitasi dan pemeriksaan draf diker- jakan sepenuhnya di dalam sistem.
+
+3.1.4.1 Use Case Diagram
+
+Gambar 3-1 menyajikan use case diagram sistem Nalar AI. Tiga use case yang memerlukan model bahasa dihubungkan ke aktor Penyedia LLM, yaitu eks- traksi metadata, agentic write, dan percakapan riset.
+
+Sistem Nalar AI
+
+Kelola grup laporan
+
+Penyedia
+
+Pengguna
+
+LLM
+
+Unggah referensi PDF
+
+$\ll$include$\gg$
+
+Ekstraksi metadata
+
+Bangkitkan sitasi tujuh format
+
+$\ll$include$\gg$
+
+Tulis draf di Co-Writer
+
+Agentic write
+
+Percakapan riset
+
+Periksa struktur dan sitasi draf
+
+Ekspor LATEX/PDF/DOCX
+
+Use Case Diagram Sistem Nalar AI
+
+Gambar 3-1
+
+13
+
+Deskripsi dua use case inti disajikan pada Tabel 3-2 dan Tabel 3-3.
+
+3.1.4.2 Sequence Diagram Agentic Write
+
+Gambar 3-2 menyajikan sequence diagram untuk use case Agentic Write, disusun mengikuti endpoint POST /co\_writer/agent-write/stream dan fungsi agentic\_write() pada app/services/agentic\_writer.py.
+
+Perhatikan bahwa penggantian penanda sitasi dikerjakan oleh sistem sendiri setelah keluaran LLM diterima, bukan diserahkan kepada LLM.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lllll}
+\toprule
+ &  &  & Penyedia LLM &  \\
+\midrule
+--- & --- & --- & --- & --- \\
+alt {[}grup & tanpa referensi{]} $\rightarrow$422 ""Grup ini be & lum memiliki refer &  &  \\
+ & 5: prompt referensi b &  &  &  \\
+ & 6: draf str dengan pen 7: replace cit \_ validasi {[}n{]} + ge &  &  &  \\
+ &  & ation markers() \textit{ nerate citation() } &  &  \\
+\bottomrule
+\end{tabular}
+\end{table}
+Sequence Diagram Agentic Write
+
+Gambar 3-2
+
+3.1.4.3 Sequence Diagram Ekspor Dokumen
+
+Gambar 3-3 menyajikan sequence diagram ekspor dokumen sesuai endpo- int GET /co\_writer/documents/\{doc\_id\}/export. Ekspor tidak me- manggil LLM sama sekali: seluruh konversi dikerjakan oleh pustaka konversi dan compiler LATEX.
+
+14
+
+Co-Writer
+
+Basis Data tectonic /
+
+FastAPI
+
+Pengguna
+
+(Next.js)
+
+SQLite export python-docx
+
+1: pilih format (tex/pdf/docx)
+
+2: GET export?format=
+
+3: ambil dokumen + DOI referensi
+
+4: isi markdown + peta DOI
+
+5: konversi markdown
+
+(heading, tabel, gambar)
+
+6: berkas hasil
+
+7: FileResponse
+
+8: unduhan berkas
+
+Sequence Diagram Ekspor Dokumen
+
+Gambar 3-3
+
+3.1.4.4 Activity Diagram Unggah dan Ekstraksi Metadata activity diagram
+
+Gambar
+
+3-4 menyajikan unggah re-
+
+POST ferensi beserta ekstraksi metadata di latar, mengikuti
+
+/journal/references run\_extract\_metadata() dan pada app/services/journal\_metadata.py.
+
+Diagram memperlihatkan ti- ga titik keputusan yang benar-benar ada pada kode: validasi ekstensi berkas, validasi ukuran maksimal 25 MB, dan keberhasilan pembacaan teks berkas.
+
+15
+
+Pilih berkas PDF dan grup laporan tidak
+
+Tolak: HTTP 415 ekstensi format tidak didukung
+
+.pdf?
+
+ya tidak ukuran
+
+Tolak: HTTP 413
+
+$\le$25 MB?
+
+berkas terlalu besar ya
+
+Simpan berkas ke uploads/
+
+Buat baris journal\_references status = pending
+
+Jalankan tugas latar status = extracting tidak status = failed teks berkas metadata diisi manual terbaca?
+
+ya
+
+Kirim teks awal ke LLM dan urai JSON metadata
+
+Simpan metadata status = extracted
+
+Activity Diagram Unggah Referensi dan Ekstraksi Metadata
+
+Gambar 3-4
+
+Tabel 3-2
+
+Use Case: Agentic Write
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ll}
+\toprule
+Nama & Agentic Write \\
+\midrule
+--- & --- \\
+Aktor & Pengguna \\
+Prakondisi & Pengguna telah memiliki grup laporan berisi minimal satu refe- rensi dengan metadata lengkap. \\
+Alur utama & (1) Pengguna memilih grup laporan dan menulis perintah (mis. ""tulis Bab 2 Tinjauan Pustaka""); (2) sistem membaca seluruh re- ferensi grup dan isi draf; (3) AI menyusun draf bab dengan sitasi {[}n{]}; (4) sistem menampilkan draf beserta daftar sitasi yang dipa- kai; (5) pengguna memilih Terima, Tolak, atau Edit. \\
+Alur alternatif & Bila grup belum memiliki referensi, sistem menampilkan pesan ""Grup ini belum memiliki referensi jurnal"". \\
+\bottomrule
+\end{tabular}
+\end{table}
+16
+
+Tabel 3-3
+
+Use Case: Ekspor Dokumen
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ll}
+\toprule
+Nama & Ekspor Dokumen \\
+\midrule
+--- & --- \\
+Aktor & Pengguna \\
+Prakondisi & Dokumen Co-Writer memiliki isi. \\
+Alur utama & (1) Pengguna memilih format ekspor (LATEX, PDF, atau DO- CX); (2) sistem mengonversi markdown sesuai format; (3) sis- tem mengunduh berkas hasil; (4) untuk PDF, sistem menjalankan compiler tectonic. \\
+Alur alternatif & Bila isi kosong, sistem menampilkan peringatan ""Add some con- tent before exporting"". \\
+\bottomrule
+\end{tabular}
+\end{table}
+\subsection*{3.2 Perancangan Sistem Entity Relationship Diagram (ERD)}
+\subsection*{3.2.1}
+Sistem memakai basis data relasional SQLite yang diakses melalui
+
+SQLAlchemy async.
+
+Gambar 3-5 menyajikan ERD tujuh tabel inti beserta kardinalitas dan aksi referential integrity sebagaimana dideﬁnisikan pada ber- kas model (app/models/user.py, journal.py, co\_writer.py, dan co\_writer\_checkpoint.py). Seluruh kunci utama bertipe UUID.
+
+17 journal\_references id : UUID users user\_id : UUID (FK) journal\_groups id : UUID group\_id : UUID (FK) username : String(50) unik id : UUID ﬁlename, ﬁle\_path email : String(255) user\_id : UUID (FK)
+
+1 ...N
+
+1 ...N title, authors (JSON), year hashed\_password : String(255) name : String(255) journal\_name, volume, issue full\_name : String(255) description : Text pages, doi, publisher is\_admin : Boolean created\_at : DateTime abstract : Text created\_at : DateTime status : String(20) error\_message : String(1000)
+
+1 ...N saved\_citations citation\_categories id : UUID id : UUID user\_id : UUID (FK) co\_writer\_documents
+
+0 .. .N user\_id : UUID (FK)
+
+1 ...N category\_id : UUID (FK) id : UUID name : String(255) reference\_id : UUID (FK) user\_id : UUID (FK) format : String(30) title : String(255) citation\_text : Text content : Text note : String(1000) created\_at, updated\_at
+
+1 ...N
+
+1 .. .N co\_writer\_checkpoints id : UUID doc\_id : UUID (FK) user\_id : UUID (FK) label : String(255) content\_snapshot : Text
+
+Entity Relationship Diagram Sistem Nalar AI
+
+Gambar 3-5 users
+
+ON DELETE CASCADE,
+
+Seluruh relasi ke memakai aksi
+
+$\rightarrow$ journal\_groups journal\_references, demikian pula relasi citation\_categories $\rightarrow$saved\_citations, dan co\_writer\_documents
+
+$\rightarrow$co\_writer\_checkpoints, sehingga penghapusan induk otomatis mem- bersihkan barisan anaknya. Pengecualiannya adalah kolom reference\_id pada saved\_citations yang memakai ON DELETE SET NULL (digambarkan dengan garis putus-putus): sitasi yang sudah disimpan tetap ada meskipun berkas referensi asalnya dihapus, karena teks sitasinya sudah tersimpan pada kolom citation\_text.
+
+\subsection*{3.2.2 Kamus Data}
+Kamus data ringkas untuk tabel inti journal\_references disajikan pada Tabel 3-4.
+
+18
+
+Kamus Data journal\_references
+
+Tabel 3-4
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\toprule
+Field & Tipe & Keterangan \\
+\midrule
+--- & --- & --- \\
+id & UUID & Kunci utama \\
+user id \_ & UUID & Pemilik referensi (FK users) \\
+group id \_ & UUID & Grup laporan (FK journal groups) \_ \\
+filename & String(500) & Nama berkas asli \\
+file path \_ & String(1000) & Lokasi penyimpanan berkas \\
+title & String(1000) & Judul artikel \\
+authors & JSON & Daftar penulis \\
+year & Integer & Tahun terbit \\
+journal name \_ & String(1000) & Nama jurnal \\
+volume, issue, pages & String & Volume, nomor, halaman \\
+doi & String(500) & DOI artikel \\
+publisher & String(500) & Penerbit \\
+abstract & Text & Abstrak \\
+status & String(20) & pending / extracting / extracted / failed \\
+\bottomrule
+\end{tabular}
+\end{table}
+\subsection*{3.2.3 Perancangan Algoritma}
+Bagian ini menguraikan rancangan algoritma inti sistem: ekstraksi metada- ta, generator sitasi, agentic writing, pembangkit daftar pustaka, ekspor LATEX/PDF, dan pratinjau rapi.
+
+3.2.3.1 Algoritma Ekstraksi Metadata
+
+Ekstraksi metadata dijalankan sebagai tugas latar setelah berkas referensi tersimpan. Alur perancangannya:
+
+\begin{enumerate}
+\item Berkas dibaca sesuai format: PDF memakai PyMuPDF (fitz), DOCX me- makai python-docx.
+\item Teks awal (halaman pertama PDF atau paragraf pertama DOCX) dikirim ke
+\end{enumerate}
+LLM dengan instruksi mengekstrak judul, penulis, tahun, jurnal, volume, no- mor, halaman, DOI, dan penerbit.
+
+19
+
+\begin{enumerate}
+\item Hasil JSON divalidasi dan disimpan pada baris referensi; status menjadi extracted.
+\item Bila gagal (berkas hasil scan, LLM tidak merespons), status menjadi failed dengan pesan galat dan pengguna dapat mengisi metadata manual.
+\end{enumerate}
+3.2.3.2 Algoritma Generator Sitasi
+
+Generator sitasi adalah fungsi murni Python yang menerima metadata refe- rensi dan nama format, lalu menyusun teks sitasi sesuai aturan:
+
+{[}n{]} A. Author, ""Title,"" Journal, vol.
+
+x, no.
+
+\begin{enumerate}
+\item IEEE:
+\end{enumerate}
+y, pp.
+
+z, tahun.
+
+Author, A. (Tahun).
+
+Judul.
+
+Nama Jurnal,
+
+\begin{enumerate}
+\item APA
+\end{enumerate}
+7th:
+
+vol(no), hal.
+
+DOI
+
+\begin{enumerate}
+\item MLA, Chicago, Harvard, Vancouver, dan SNI mengikuti aturan masing- masing.
+\item Nama penulis dinormalisasi (inisial untuk IEEE/Vancouver; nama lengkap untuk APA/SNI).
+\end{enumerate}
+Karena seluruh aturan ditulis sebagai fungsi deterministik, pembangkitan berjalan instan (kurang dari satu detik) dan konsisten.
+
+3.2.3.3 Algoritma Agentic Writing
+
+Agentic writing dijalankan saat pengguna memberi perintah menulis pada tab Agentic Write:
+
+\begin{enumerate}
+\item Sistem memuat seluruh referensi grup laporan aktif dan isi dokumen saat ini.
+\item Prompt disusun berisi daftar referensi bernomor, konteks RAG dari isi jurnal
+\end{enumerate}
+(bila diaktifkan), dan instruksi menulis.
+
+\begin{enumerate}
+\item LLM menghasilkan draf secara streaming dengan penanda sitasi {[}n{]}.
+\item Penanda {[}n{]} diganti menjadi sitasi sesuai format aktif dan daftar pustaka di- bangun.
+\item Draf ditampilkan untuk konﬁrmasi (Terima/Tolak/Edit) sebelum diterapkan ke dokumen.
+\end{enumerate}
+20
+
+3.2.3.4 Algoritma Pembangkit Daftar Pustaka
+
+Daftar pustaka dibangkitkan ulang dengan memindai seluruh penanda {[}n{]} pada isi dokumen, mencocokkan nomor ke referensi (urut created\_at), menyu- sun sitasi sesuai format aktif, dan mengganti bagian ""Daftar Pustaka"" yang lama.
+
+3.2.3.5 Algoritma Ekspor LATEX dan PDF
+
+Draf markdown dikonversi ke source
+
+LATEX:
+
+heading menjadi
+
+\textbackslash\{\}section/\textbackslash\{\}subsection, tabel menjadi tabular, gambar menjadi figure dengan caption, daftar menjadi itemize/enumerate. Source LATEX dikompilasi menjadi PDF memakai tectonic.exe; berkas .tex juga dapat diunduh langsung.
+
+3.2.3.6 Algoritma Pratinjau Rapi (Typeset Preview)
+
+Pratinjau rapi merender markdown menjadi HTML dengan penomoran oto- matis: heading diberi nomor bab (1, 1.1, 1.1.1), gambar diberi caption ""Gambar N"", tabel diberi caption ""Tabel N"", dan margin A4 diterapkan agar tampilan mendekati hasil cetak.
+
+\subsection*{Perancangan Antar Muka (User Interface)}
+\subsection*{3.2.4}
+Antarmuka dirancang dengan tema gelap konsisten dan menu utama: Da- shboard (progres bab, ringkasan referensi, pintasan lanjut menulis), Chat (riset mandiri), Co-Writer (editor tiga kolom: panel percakapan riset di kiri, editor mar- kdown dan pratinjau di tengah, panel Referensi/Agentic Write di kanan), Learning
+
+Space (tab Chat, Referensi, Draf), dan Settings (konﬁgurasi model LLM, format sitasi default, tampilan).
+
+\subsection*{Bab 4 IMPLEMENTASI DAN PENGUJIAN}
+\subsection*{4.1 Implementasi 4.1.1 Lingkungan Implementasi}
+Sistem Nalar AI diimplementasikan dengan lingkungan sebagai berikut:
+
+• Frontend: Next.js 16.2 (React) dengan TypeScript, dijalankan pada port
+
+3000.
+
+• Backend: FastAPI (Python 3.12.3) dengan SQLAlchemy async dan SQLite, dijalankan pada port 8087.
+
+• Model LLM: Penyedia OpenAI-compatible yang dikonﬁgurasi pengguna de- ngan antarmuka streaming.
+
+• Parsing berkas: PyMuPDF (fitz) untuk PDF dan python-docx untuk
+
+DOCX.
+
+• Kompilasi LATEX: tectonic.exe versi 0.15.0.
+
+• Pengujian: pytest 9.1.1 (backend) dan tsc -noEmit (frontend).
+
+Arsitektur penerapan sistem beserta jalur komunikasi antarkomponen disa- jikan pada Gambar 4-1. Permintaan peramban ke /api/\textit{ dan /ws/} diteruskan oleh middleware Next.js ke peladen FastAPI, sedangkan autentikasi memakai coo- kie nalar\_token bertanda httponly yang ditandatangani HS256.
+
+21
+
+22
+
+Peramban Pengguna
+
+HTTPS
+
+Next.js 16 App Router (:3000)
+
+(auth) | (workspace) | (admin)
+
+Co-Writer, Referensi, Dashboard middleware: rewrite /api/\textit{, /ws/}
+
+REST + SSE + WebSocket cookie nalar\_token
+
+Penyedia LLM
+
+FastAPI (:8087) -- app/api/routes/
+
+HTTP
+
+OpenAI-compatible auth | journal | co\_writer | chat | settings
+
+Lapisan Layanan -- app/services/ subprocess tectonic.exe citation\_formatter (fungsi murni, tanpa LLM) agentic\_writer | journal\_metadata | typeset kompilasi PDF docx\_exporter | pdf\_exporter | doc\_import
+
+Berkas uploads/
+
+SQLite
+
+PDF dan gambar nalar\_ai.db
+
+Gambar 4-1
+
+Arsitektur Penerapan Sistem Nalar AI
+
+\subsection*{4.1.2 Implementasi Modul Manajemen Referensi}
+Modul manajemen referensi diimplementasikan pada app/api/routes/journal.py dengan tabel journal\_groups dan journal\_references. Unggahan ber- kas PDF diterima melalui POST /journal/references dengan batas ukuran
+
+25 MB, berkas disimpan pada folder uploads, lalu ekstraksi metadata dijalankan sebagai tugas latar (BackgroundTasks) memakai model LLM hasil konﬁgurasi
+
+Status referensi berpindah dari pending ke extracting, lalu pengguna.
+
+extracted bila berhasil atau failed beserta pesan galat. Antarmuka halaman
+
+Referensi Jurnal ditunjukkan pada Gambar 4-2.
+
+23
+
+\begin{center}
+\includegraphics[width=0.92\textwidth]{http://localhost:8087/uploads/bf181917-d402-4be8-85f3-e9de81d201e9/images/img_002.png}
+\end{center}
+Gambar 4-2
+
+Halaman Referensi Jurnal
+
+Generator sitasi diimplementasikan sebagai fungsi murni Python pada app/services/citation\_formatter.py yang menerima metadata dan nama format (IEEE, APA, MLA, Chicago, Harvard, Vancouver, SNI) lalu meng- embalikan teks sitasi. Karena tidak melibatkan pemanggilan model bahasa, ketujuh format dihasilkan dari metadata yang sama secara instan dan konsisten.
+
+\subsection*{4.1.3 Implementasi Modul Co-Writer}
+Co-Writer diimplementasikan pada app/(workspace)/co-writer dengan layout tiga kolom: panel percakapan riset dan daftar outline (kiri, dapat diubah lebar dan ditutup), editor markdown dengan pratinjau (tengah), dan panel kanan berisi tab Referensi (klik menyisipkan sitasi pada posisi kursor) serta tab
+
+Agentic Write. Pada editor tersedia toolbar (heading H1-H6, penebalan, tabel, taut- an, gambar, blok kode, diagram Mermaid, formula), daftar isi otomatis dari heading
+
+H1-H3, serta pratinjau dua mode ""Draft"" dan ""Rapi"" ala LATEX. Gambar 4-3 dan
+
+Gambar 4-4 menampilkan daftar dokumen Co-Writer dan editor tiga kolom.
+
+24
+
+\begin{center}
+\includegraphics[width=0.92\textwidth]{http://localhost:8087/uploads/bf181917-d402-4be8-85f3-e9de81d201e9/images/img_003.png}
+\end{center}
+Gambar 4-3
+
+Halaman Co-Writer (Daftar Dokumen)
+
+\begin{center}
+\includegraphics[width=0.92\textwidth]{http://localhost:8087/uploads/bf181917-d402-4be8-85f3-e9de81d201e9/images/img_004.png}
+\end{center}
+Gambar 4-4
+
+Editor Co-Writer Tiga Kolom
+
+Daftar isi otomatis disusun oleh komponen OutlineSidebar.tsx de- ngan memindai baris berawalan \# pada isi markdown, sehingga setiap heading da- pat diklik untuk melompat ke posisinya di editor. Hasilnya ditunjukkan pada Gam- bar 4-5.
+
+25
+
+\begin{center}
+\includegraphics[width=0.92\textwidth]{http://localhost:8087/uploads/bf181917-d402-4be8-85f3-e9de81d201e9/images/img_005.png}
+\end{center}
+Gambar 4-5
+
+Daftar Isi Otomatis dari Heading Dokumen
+
+\subsection*{4.1.4 Implementasi Pratinjau Rapi dan Pemeriksaan Draf}
+(typeset preview)
+
+GET
+
+Pratinjau rapi dilayani endpoint
+
+/co\_writer/documents/\{doc\_id\}/typeset yang merender mar- kdown menjadi HTML dengan penomoran bab, gambar, dan tabel otomatis serta margin A4, sehingga tampilan mendekati hasil cetak (Gambar 4-6).
+
+\begin{center}
+\includegraphics[width=0.92\textwidth]{http://localhost:8087/uploads/bf181917-d402-4be8-85f3-e9de81d201e9/images/img_006.png}
+\end{center}
+Pratinjau Rapi (Typeset Preview)
+
+Gambar 4-6
+
+26
+
+(gap analysis)
+
+GET
+
+Pemeriksaan kelengkapan struktur dilayani
+
+/co\_writer/documents/\{doc\_id\}/gap-analysis.
+
+Endpoint ini membandingkan heading dokumen dengan delapan bagian standar artikel ilmiah
+
+(Abstrak, Pendahuluan, Tinjauan Pustaka, Metodologi, Hasil, Pembahasan, Kesim- pulan, Daftar Pustaka) memakai pencocokan substring tanpa memperhatikan huruf besar-kecil, lalu melaporkan bagian yang sudah dan belum ada. Pengujian pada dokumen uji menghasilkan 8 dari 8 bagian terdeteksi (Gambar 4-7).
+
+\begin{center}
+\includegraphics[width=0.92\textwidth]{http://localhost:8087/uploads/bf181917-d402-4be8-85f3-e9de81d201e9/images/img_007.png}
+\end{center}
+Gambar 4-7
+
+Hasil Pemeriksaan Kelengkapan Struktur
+
+Pemeriksaan sitasi dilayani POST /co\_writer/documents/\{doc\_id\}/ai-checks
+
+Berbeda dengan modul lain, pemeriksaan ini tidak memanggil model bahasa:
+
+seluruhnya dikerjakan dengan pencocokan pola (regular expression) di sisi peladen, yaitu menandai kalimat berpola klaim (mengandung ungkapan seperti ""berdasarkan data"", ""hasil penelitian menunjukkan"", ""terbukti"", atau angka persentase) yang tidak disertai penanda sitasi di sekitarnya, serta menghitung variasi penulisan istilah.
+
+Karena berbasis pola, keluarannya bersifat saran, bukan validasi wajib.
+
+Pada dokumen uji, pemeriksaan menemukan empat kalimat klaim tanpa sitasi
+
+(Gambar 4-8).
+
+27
+
+\begin{center}
+\includegraphics[width=0.92\textwidth]{http://localhost:8087/uploads/bf181917-d402-4be8-85f3-e9de81d201e9/images/img_008.png}
+\end{center}
+Gambar 4-8
+
+Hasil Pemeriksaan Sitasi dan Konsistensi Istilah
+
+\subsection*{4.1.5 Implementasi Agentic Write dan Ekspor}
+Agentic write diimplementasikan pada app/services/agentic\_writer.py
+
+POST /co\_writer/agent-write untuk pe- dan dilayani dua endpoint:
+
+manggilan biasa dan POST /co\_writer/agent-write/stream yang mengalirkan hasil sebagai Server-Sent Events sehingga pengguna melihat AI mengetik secara langsung. Alurnya: memuat seluruh referensi grup laporan aktif berurut created\_at, menyusun prompt berisi daftar referensi bernomor dan konteks RAG (bila diaktifkan), memanggil LLM, lalu memvalidasi penanda {[}n{]} pada keluaran model melalui replace\_citation\_markers().
+
+Fungsi tersebut membiarkan penanda yang tidak merujuk nomor referensi sah apa adanya, menormalkan penomoran penanda yang sah, dan membangkitkan teks sitasi lengkapnya dengan generate\_citation() untuk dikembalikan sebagai daftar sitasi terpakai. Dengan pemisahan ini, teks sitasi tidak pernah dikarang oleh model bahasa. Draf tidak langsung ditulis ke dokumen: pengguna mengonﬁrmasi terlebih dahulu (Gambar 4-9). Bila grup belum memiliki referensi, sistem menolak permintaan dengan kode 422 dan pesan ""Grup ini belum memiliki referensi jurnal.""
+
+28
+
+\begin{center}
+\includegraphics[width=0.92\textwidth]{http://localhost:8087/uploads/bf181917-d402-4be8-85f3-e9de81d201e9/images/img_009.png}
+\end{center}
+Gambar 4-9
+
+Panel Agentic Write
+
+Ekspor disediakan melalui tiga endpoint: GET /documents/\{doc\_id\}/export-late menghasilkan source LATEX, GET /documents/\{doc\_id\}/export?format=pdf mengonversi markdown ke LATEX lalu mengompilasinya dengan tectonic.exe,
+
+GET /documents/\{doc\_id\}/export?format=docx dan mengha- python-docx
+
+{[}n{]} silkan
+
+DOCX melalui dengan penanda sitasi diu-
+
+Checkpoint diimplementasikan pada tabel bah menjadi tautan DOI aktif.
+
+co\_writer\_checkpoints beserta endpoint penyimpanan, pembacaan, dan pemulihan (.../checkpoints/\{cp\_id\}/restore); fungsi ini tersedia di sisi peladen dan belum memiliki antarmuka riwayat versi di sisi klien.
+
+\subsection*{4.1.6 Implementasi Halaman Pendukung}
+Halaman Dashboard menampilkan progres penulisan, ringkasan referensi per grup, dan pintasan melanjutkan menulis (Gambar 4-10). Halaman Learning
+
+Space menggabungkan tab Chat, Referensi, dan Draf dengan kolom pencarian per- cakapan serta pengelompokan berdasarkan rentang waktu (Gambar 4-11). Halaman
+
+Pengaturan Model dipakai untuk memilih penyedia dan model LLM yang dipakai seluruh modul (Gambar 4-12).
+
+29
+
+\begin{center}
+\includegraphics[width=0.92\textwidth]{http://localhost:8087/uploads/bf181917-d402-4be8-85f3-e9de81d201e9/images/img_010.png}
+\end{center}
+Gambar 4-10
+
+Dashboard Nalar AI
+
+\begin{center}
+\includegraphics[width=0.92\textwidth]{http://localhost:8087/uploads/bf181917-d402-4be8-85f3-e9de81d201e9/images/img_011.png}
+\end{center}
+Gambar 4-11
+
+Learning Space
+
+30
+
+\begin{center}
+\includegraphics[width=0.92\textwidth]{http://localhost:8087/uploads/bf181917-d402-4be8-85f3-e9de81d201e9/images/img_012.png}
+\end{center}
+Gambar 4-12
+
+Halaman Pengaturan Model LLM
+
+\subsection*{4.2 Pengujian 4.2.1 Lingkungan Pengujian}
+Pengujian dilakukan pada peramban web modern (Chromium) dengan alur manual black-box untuk setiap modul, serta uji otomatis pytest pada backend dan tsc -noEmit pada frontend. Login uji memakai akun debugger2.
+
+\subsection*{4.2.2 Hasil Pengujian}
+Hasil pengujian fungsional disajikan pada Tabel 4-1.
+
+31
+
+Tabel 4-1
+
+Hasil Pengujian Fungsional
+
+\begin{table}[h]
+\centering
+\begin{tabular}{llll}
+\toprule
+No & Kasus Uji & Hasil & Catatan \\
+\midrule
+--- & --- & --- & --- \\
+1 & Unggah PDF jurnal & Sesuai & Metadata diekstrak (judul, penulis, tahun, DOI); status extracted \\
+2 & Impor laporan DOCX ke Co-Writer & Sesuai & Teks, heading, dan gambar di- ekstrak; media tersimpan di uploads/\{doc id\}/images/ \_ \\
+3 & Generate sitasi 7 for- mat & Sesuai & IEEE/APA/MLA/Chicago/Harvard/Vancouv dihasilkan dari metadata sama \\
+4 & Simpan sitasi ke kate- gori & Sesuai & Sitasi tersimpan di Learning Space \\
+5 & Cari jurnal internet & Sesuai & Hasil web + arXiv muncul dan dapat di- simpan ke grup \\
+6 & Agentic write & Sesuai & Draf dibuat dengan sitasi {[}n{]}; konfirmasi Terima/Tolak/Edit berfungsi \\
+7 & Ekspor LATEX & Sesuai & source .tex dengan \textbackslash\{\}section valid \\
+8 & Ekspor PDF (tectonic) & Sesuai & PDF \%PDF valid (magic bytes) \\
+9 & Ekspor DOCX & Sesuai & DOCX dengan tautan DOI; berkas ZIP va- lid \\
+10 & Quick-cite {[}{[} & Sesuai & Popup muncul, pilih referensi menyisip si- tasi \\
+11 & Checkpoint (API) & Sesuai & Snapshot tersimpan; restore mengembalik- an isi. Belum ada antarmuka riwayat versi \\
+12 & Cek struktur (gap ana- lysis) & Sesuai & Delapan bagian standar terdeteksi 8/8 pada dokumen uji \\
+13 & Cek sitasi (ai-checks) & Sesuai & Empat kalimat klaim tanpa sitasi ditemuk- an; berbasis pola, bukan LLM \\
+14 & Pratinjau rapi (typeset) & Sesuai & Heading bernomor otomatis, margin A4 \\
+\bottomrule
+\end{tabular}
+\end{table}
+Pengujian otomatis pada sisi peladen dijalankan dengan pytest dan meng- hasilkan 34 dari 34 kasus uji lulus (test\_journal\_citations.py 13 ka- sus, test\_parsing\_settings.py 19 kasus, dan test\_turnplan.py 2
+
+32 kasus) dengan waktu eksekusi 12,23 detik. Pada sisi klien, pemeriksaan tipe tsc
+
+-noEmit berjalan tanpa galat. Seluruh endpoint inti (manajemen referensi, gene-
+
+rator sitasi, Co-Writer, agentic write, pemeriksaan draf, pratinjau rapi, checkpoint, dan ekspor) bekerja sesuai spesiﬁkasi.
+
+\subsection*{4.2.3 Perbaikan Cacat yang Ditemukan Saat Pengujian}
+Pengujian antarmuka menemukan dua cacat tampilan yang keduanya telah diperbaiki pada berkas app/(workspace)/co-writer/{[}docId{]}/page.tsx:
+
+\begin{enumerate}
+\item Popover pemeriksaan terpotong.
+\end{enumerate}
+Baris toolbar editor memakai kelas overflow-x-auto. Menurut spesiﬁkasi CSS, nilai overﬂow visible pada satu sumbu ikut dihitung menjadi auto apabila sumbu lainnya buk- an visible, sehingga baris toolbar berubah menjadi kotak pemotong pada sumbu vertikal. Akibatnya popover Daftar Isi, Cek Struktur, dan Cek Sita- si yang diposisikan tepat di bawah toolbar hampir seluruhnya tidak tampak:
+
+pengukuran memperlihatkan tinggi popover 290 piksel sementara batas ba- wah kotak pemotong hanya 7 piksel di bawah tepi atas popover, yakni seki- tar 97 persen isinya terpotong. Perbaikan dilakukan dengan memindahkan overflow-x-auto dari baris toolbar ke kelompok tombol pemformatan yang tidak memuat elemen melayang.
+
+\begin{enumerate}
+\item Panel outline menimpa panel percakapan. Pembungkus panel outline be- lum berupa ﬂex container vertikal, sedangkan komponen di dalamnya me- makai flex-1, sehingga daftar heading yang panjang meluber dan menutu- pi judul ""Chat Riset"" beserta blok status Referensi di bawahnya. Perbaikan dilakukan dengan menetapkan pembungkusnya sebagai kolom ﬂex berbatas tinggi yang menyembunyikan luberan.
+\end{enumerate}
+\subsection*{Bab 5 PENUTUP 5.1 Kesimpulan}
+Berdasarkan seluruh tahapan analisis, perancangan, implementasi, dan pe- ngujian sistem Nalar AI, diperoleh kesimpulan sebagai berikut:
+
+\begin{enumerate}
+\item Sistem manajemen referensi jurnal berhasil dibangun: unggahan berkas PDF
+\end{enumerate}
+(maksimal 25 MB) diproses untuk mengekstrak metadata (judul, penulis, ta- hun, jurnal, DOI) secara otomatis memakai LLM sebagai tugas latar, referen- si dikelompokkan per grup laporan, dan generator sitasi menghasilkan tujuh format baku (IEEE, APA, MLA, Chicago, Harvard, Vancouver, SNI) seca- ra instan dari metadata yang sama tanpa pemanggilan model bahasa. Hasil pengujian menunjukkan seluruh format dihasilkan dengan benar dan dapat disalin atau disimpan ke kategori sitasi.
+
+\begin{enumerate}
+\item Agentic writing pada Co-Writer berhasil diimplementasikan: AI membaca seluruh referensi grup laporan aktif dan keseluruhan isi draf, menyu- sun bab utuh dengan penanda sitasi {[}n{]}, lalu menampilkan draf untuk konﬁrmasi (Terima/Tolak/Edit) sebelum diterapkan.
+\end{enumerate}
+Validasi penan- da {[}n{]} dan pembangkitan teks sitasinya dikerjakan oleh sistem melalui replace\_citation\_markers() generate\_citation(), dan bukan oleh model bahasa, sehingga setiap klaim tertambat pada daftar pustaka secara deterministik.
+
+\begin{enumerate}
+\item Pratinjau rapi ala LATEX dan ekspor berkualitas berhasil diwujudkan: mar- kdown dirender dengan penomoran bab, gambar, dan tabel otomatis; ekspor tersedia dalam format LATEX (.tex), PDF (dikompilasi dengan tectonic), dan DOCX dengan tautan DOI aktif, yang mempertahankan struktur hea- ding, tabel, gambar, dan daftar pustaka. Seluruh jalur ekspor berjalan tanpa memanggil model bahasa.
+\item Fitur pendukung yang mempercepat alur penulisan juga berjalan, yaitu daftar isi otomatis dari heading H1-H3, penyisipan sitasi cepat melalui trigger {[}{[}, analisis kesenjangan struktur terhadap delapan bagian baku artikel ilmiah, serta deteksi kalimat klaim tanpa sitasi yang dikerjakan dengan pencocokan pola di sisi peladen.
+\end{enumerate}
+33
+
+34
+
+\subsection*{5.2 Keterbatasan Sistem}
+Agar cakupan hasil penelitian terbaca apa adanya, berikut bagian spesiﬁkasi yang belum terwujud pada versi sistem yang diuji:
+
+\begin{enumerate}
+\item Checkpoint versi dokumen sudah tersedia lengkap pada sisi peladen (simpan, daftar, dan pemulihan), tetapi belum memiliki antarmuka riwayat versi pada sisi klien sehingga hanya dapat diakses melalui API.
+\item Pemeriksaan draf (ai-checks) masih berbasis pencocokan pola, belum mema- kai model bahasa, sehingga keluarannya bersifat saran dan dapat menandai kalimat yang sebenarnya tidak memerlukan sitasi.
+\item Hasil agentic write diterapkan sebagai satu blok utuh; pembandingan baris demi baris (inline diff) beserta tombol Terima/Tolak per bagian belum terse- dia.
+\item Ringkasan otomatis per bab dan ﬁtur penangkapan bagian dokumen (capture) belum diimplementasikan.
+\item Kemampuan analisis gambar (vision), baik pada saat penangkapan maupun pada saat impor berkas, serta pengenalan teks (OCR) untuk berkas hasil pin- dai belum tersedia; berkas PDF tanpa lapisan teks harus diisi metadatanya secara manual.
+\end{enumerate}
+\subsection*{5.3 Saran}
+Untuk pengembangan selanjutnya, disarankan beberapa hal berikut:
+
+\begin{enumerate}
+\item Membangun antarmuka riwayat versi pada Co-Writer yang memakai API checkpoint yang sudah tersedia, dilengkapi pembandingan isi antarversi.
+\item Mengganti pemeriksaan draf berbasis pola dengan pemeriksaan berbantuan model bahasa agar penilaian kebutuhan sitasi lebih tepat, dengan tetap me- nampilkan alasan setiap temuan.
+\item Menyediakan inline diff beserta tombol Terima/Tolak per bagian pada hasil agentic write sehingga pengguna dapat menerima sebagian usulan saja.
+\item Menambah kemampuan analisis gambar (vision) dan pengenalan teks (OCR) agar diagram, tabel, dan berkas hasil pindai dapat dipahami sistem.
+\end{enumerate}
+35
+
+\begin{enumerate}
+\item Menambahkan integrasi langsung dengan Google Scholar dan basis data pus- taka lain agar pencarian dan penyimpanan referensi berbahasa Indonesia lima tahun terakhir semakin otomatis.
+\item Menerapkan sinkronisasi dua arah ala SyncTeX antara editor dan pratinjau rapi (klik pada pratinjau melompat ke baris sumber yang sesuai).
+\item Menyediakan dukungan template kampus yang dapat dipilih (skripsi, jurnal, makalah) dengan pengaturan margin dan gaya yang berbeda-beda.
+\item Memperluas format ekspor ke format yang dibutuhkan pengelola jurnal ter- tentu serta meningkatkan kapasitas unggahan untuk berkas berukuran besar.
+\end{enumerate}
+\subsection*{DAFTAR PUSTAKA}
+{[}1{]} P. Lewis et al., ""Retrieval-augmented generation for knowledge-intensive
+
+NLP tasks,"" Advances in Neural Information Processing Systems (NeurIPS), vol. 33, pp. 9459-9474, 2020.
+
+{[}2{]} Y. Gao et al., ""Retrieval-augmented generation for large language models: A survey,"" arXiv preprint arXiv:2312.10997, 2023.
+
+{[}3{]} A. Vaswani et al., ""Attention is all you need,"" in Advances in Neural Informa- tion Processing Systems (NeurIPS), 2017, pp. 5998-6008.
+
+{[}4{]} S. Yao et al., ""ReAct: Synergizing reasoning and acting in language models,"" in Int. Conf. on Learning Representations (ICLR), 2023.
+
+{[}5{]} T. Schick et al., ""Toolformer: Language models can teach themselves to use tools,"" in Advances in Neural Information Processing Systems (NeurIPS), vol. 36, 2023.
+
+{[}6{]} L. Wang et al., ""A survey on large language model based autonomous agents,""
+
+Frontiers of Computer Science, vol. 18, no. 6, 2024.
+
+{[}7{]} Z. Ji et al., ""Survey of hallucination in natural language generation,"" ACM
+
+Computing Surveys, vol. 55, no. 12, pp. 1-38, 2023.
+
+{[}8{]} D. P. Sari dan A. Wijaya, ""Implementasi retrieval-augmented generation un- tuk meningkatkan akurasi jawaban chatbot pendidikan,"" Jurnal RESTI, vol. 6, no. 4, pp. 612-620, 2022.
+
+{[}9{]} T. Hidayat dan R. Nugraha, ""Pengembangan sistem tanya jawab dokumen menggunakan retrieval-augmented generation dan embedding,"" Jurnal Teknik
+
+Informatika (JUTIF), vol. 4, no. 3, pp. 701-710, 2023.
+
+{[}10{]} F. Rahman dan D. Kurniawan, ""Analisis penerapan large language model pada sistem pembelajaran adaptif di perguruan tinggi,"" Jurnal Edukasi dan Peneli- tian Informatika (JEPIN), vol. 9, no. 2, pp. 245-254, 2023.
+
+{[}11{]} A. R. Putri dan B. Setiawan, ""Penerapan chatbot berbasis natural language processing pada layanan informasi akademik,"" Jurnal Teknologi Informasi dan
+
+Ilmu Komputer, vol. 8, no. 3, pp. 521-530, 2021.
+
+36
+
+37
+
+{[}12{]} R. Maulana dan A. Puspitasari, ""Sistem agen cerdas berbasis agentic AI untuk penulisan laporan tugas akhir,"" Jurnal Sistem Cerdas dan Rekayasa Perangkat
+
+Lunak, vol. 8, no. 1, pp. 12-23, 2026.
+
+{[}13{]} D. E. Knuth, The TeXbook. Reading, MA: Addison-Wesley, 1986.
+
+\subsection*{LAMPIRAN A KODE SUMBER MODUL INTI}
+Berikut cuplikan kode sumber modul inti aplikasi Nalar AI yang mendukung generator sitasi, agentic writing, dan ekspor LATEX. Cuplikan disalin langsung dari berkas sumber pada direktori Nalar.ai-be/app/services/.
+
+\subsection*{A.1 Modul Generator Sitasi (citation\_formatter.py)}
+Modul ini mengubah metadata referensi menjadi sitasi dalam tujuh format baku. Seluruh fungsi bersifat murni (deterministik) sehingga pembangkitan berjalan instan tanpa panggilan LLM. Pemilihan format dilakukan melalui tabel pemetaan
+
+\_FORMATTERS.
+
+1 def format\_ieee(meta: dict) -\textgreater{} str:
+
+"""{[}1{]} A. Author and B. Author, "Title," Journal, vol. x, no.
+
+2 y, pp. z, 2026."""
+
+\_require(meta, "title", "year")
+
+3 authors = \_authors\_list(meta.get("authors"))
+
+4 year = meta{[}"year"{]}
+
+5 title = str(meta{[}"title"{]}).strip().rstrip(".")
+
+6 journal = str(meta.get("journal\_name") or "").strip().rstrip("
+
+7
+
+.") body = f'"\{title\},"'
+
+8 if journal:
+
+9 body += f" \{journal\}"
+
+10 vi = \_vol\_issue(meta)
+
+11 if vi:
+
+12 body += f", \{vi\}"
+
+13 pg = \_pages(meta)
+
+14 if pg:
+
+15 body += f", \{pg\}"
+
+16 body += f", \{year\}."
+
+17 if not authors:
+
+18 return body
+
+19 initials = {[}\_initials(a) for a in authors{[}:6{]}{]}
+
+20 if len(initials) == 1:
+
+21 names = initials{[}0{]}
+
+22 elif len(initials) == 2:
+
+23 names = f"\{initials{[}0{]}\} and \{initials{[}1{]}\}"
+
+24
+
+38
+
+39 else:
+
+25 names = ", ".join(initials{[}:-1{]}) + f", and \{initials{[}-1{]}\}"
+
+26 return f"\{names\}, \{body\}"
+
+27
+
+28
+
+29 \# ... (dipotong: format\_apa, format\_mla, format\_chicago,
+
+30 \# format\_harvard, format\_vancouver, format\_sni)
+
+31
+
+32 def generate\_citation(meta: dict, format\_name: str = "ieee") -\textgreater{} str:
+
+"""Generate satu sitasi dari metadata.
+
+33
+
+34
+
+Args:
+
+35 meta: dict berisi title, authors, year, journal\_name,
+
+36 volume, issue, pages, doi, publisher.
+
+37 format\_name: salah satu dari CITATION\_FORMATS.
+
+38
+
+39
+
+Raises:
+
+40
+
+CitationError: format tidak dikenal atau metadata tidak
+
+41 lengkap.
+
+"""
+
+42 key = (format\_name or "ieee").lower().strip()
+
+43 if key not in \_FORMATTERS:
+
+44 raise CitationError(f"Format sitasi tidak dikenal: \{
+
+45 format\_name\}. " f"Pilihan: \{', '.join(CITATION\_FORMATS
+
+46
+
+)\}") return \_FORMATTERS{[}key{]}(meta)
+
+47 citation\_formatter.py -- format IEEE dan gerbang pemilihan
+
+Listing 1 format
+
+\subsection*{A.2 Modul Agentic Writing (agentic\_writer.py)}
+Modul ini menyusun draf bab dengan membaca seluruh referensi grup lapor- an aktif berurut created\_at, menyusun prompt berisi daftar referensi bernomor, memanggil LLM, lalu memvalidasi penanda sitasi yang dikembalikan model.
+
+references = list(
+
+1
+
+(
+
+2 await db.scalars(
+
+3 select(JournalReference)
+
+4
+
+.where(
+
+5
+
+40
+
+JournalReference.group\_id == group\_id,
+
+6
+
+JournalReference.user\_id == user.id,
+
+7
+
+)
+
+8
+
+.order\_by(JournalReference.created\_at.asc())
+
+9
+
+)
+
+10
+
+).all()
+
+11
+
+)
+
+12 if not references:
+
+13 raise ValueError("Grup ini belum memiliki referensi jurnal
+
+14
+
+. Upload jurnal dulu.")
+
+15 ref\_block = \_reference\_block(references)
+
+16 context = rag\_context{[}:\_MAX\_REFERENCE\_CHARS{]} if rag\_context
+
+17 else "" prompt = (
+
+18 f"Grup laporan: \{group.name\}\textbackslash\{\}n"
+
+19 f"Perintah user: \{instruction\}\textbackslash\{\}n\textbackslash\{\}n"
+
+20 f"Daftar referensi yang tersedia (nomor = sitasi yang
+
+21 wajib dipakai):\textbackslash\{\}n\{ref\_block\}\textbackslash\{\}n\textbackslash\{\}n"
+
+)
+
+22 if context:
+
+23 prompt += (
+
+24
+
+"Konteks isi jurnal (dari RAG - gunakan untuk menulis
+
+25 akurat, "
+
+"tetap sitasi dengan nomor di atas):\textbackslash\{\}n"
+
+26 f"\{context\}\textbackslash\{\}n\textbackslash\{\}n"
+
+27
+
+)
+
+28 prompt += (
+
+29
+
+"Tulis bagian laporan sesuai perintah. Sertakan sitasi {[}n{]}
+
+30 pada kalimat yang "
+
+"mengambil informasi dari referensi bernomor n."
+
+31
+
+)
+
+32
+
+33 writer = AgenticWriter(llm)
+
+34 raw = await writer.ask(prompt, system=\_SYSTEM\_AGENTIC\_WRITER)
+
+35
+
+36 draft, used = replace\_citation\_markers(raw, references,
+
+37 format\_name) return \{
+
+38
+
+"draft": draft,
+
+39
+
+"references": used,
+
+40
+
+"citation\_count": len(used),
+
+41
+
+41
+
+\}
+
+42 agentic\_writer.py -- pemuatan referensi dan penyusunan
+
+Listing 2 prompt
+
+Fungsi replace\_citation\_markers() berperan sebagai penjaga in- tegritas sitasi. Penanda {[}n{]} yang tidak merujuk nomor referensi yang sah dibiarkan apa adanya, sedangkan penanda yang sah dinormalkan penomorannya dan teks si- tasi lengkapnya dikumpulkan pada senarai used untuk ditampilkan sebagai daftar pustaka draf. Dengan cara ini, teks sitasi tidak pernah dikarang oleh model bahasa.
+
+1 def resolve\_reference\_ids(references: list{[}JournalReference{]}, markers: list{[}str{]}) -\textgreater{} list{[}int{]}:
+
+"""Cari nomor referensi yang disebut LLM (mis. {[}1{]}, {[}2{]}) -
+
+2 index 0-based.""" ids: list{[}int{]} = {[}{]}
+
+3 for marker in markers:
+
+4 match = re.search(r"\textbackslash\{\}d+", marker)
+
+5 if match:
+
+6 idx = int(match.group()) - 1
+
+7 if 0 \textless{}= idx \textless{} len(references) and idx not in ids:
+
+8 ids.append(idx)
+
+9 return ids
+
+10
+
+11
+
+12
+
+13 def replace\_citation\_markers(text: str, references: list{[}
+
+JournalReference{]}, format\_name: str) -\textgreater{} tuple{[}str, list{[}
+
+14 str{]}{]}:
+
+"""Ganti {[}n{]} dengan sitasi format pilihan; kembalikan (teks,
+
+15 daftar sitasi terpakai).""" used: list{[}str{]} = {[}{]}
+
+16
+
+17 def \_replacer(match: re.Match) -\textgreater{} str:
+
+18 marker = match.group(0)
+
+19 ids = resolve\_reference\_ids(references, {[}marker{]})
+
+20 if not ids:
+
+21 return marker
+
+\section*{biarkan bila bukan nomor referensi}
+22 valid idx = ids{[}0{]}
+
+23 ref = references{[}idx{]}
+
+24 try:
+
+25 citation = generate\_citation(
+
+26 citation\_meta\_from\_reference(ref), format\_name)
+
+42 except CitationError:
+
+27 citation = f"\{ref.title\} (\{ref.year if ref.year else '
+
+28 t.t.'\})" used.append(citation)
+
+29 return f"{[}\{idx + 1\}{]}"
+
+30
+
+31 replaced = re.sub(r"\textbackslash\{\}{[}(\textbackslash\{\}d+)\textbackslash\{\}{]}", \_replacer, text)
+
+32 return replaced, used
+
+33 agentic\_writer.py -- validasi dan normalisasi penanda sitasi
+
+Listing 3
+
+\subsection*{A.3 Modul Ekspor LATEX (latex\_export.py)}
+Modul ini mengonversi markdown menjadi source LATEX lalu mengompi- lasinya menjadi PDF memakai tectonic. Konversi menangani heading empat tingkat, gambar, dan tabel.
+
+1 def markdown\_to\_latex(markdown\_text: str) -\textgreater{} str:
+
+"""Markdown -\textgreater{} source LaTeX lengkap (preamble + body +
+
+2 postamble).""" lines = markdown\_text.split("\textbackslash\{\}n")
+
+3 out: list{[}str{]} = {[}\_PREAMBLE{]}
+
+4 fig\_count = 0
+
+5 i = 0
+
+6 while i \textless{} len(lines):
+
+7 line = lines{[}i{]}.rstrip()
+
+8 stripped = line.strip()
+
+9
+
+10
+
+\section*{Heading}
+11 m = re.match(r"\textasciicircum{}(\#\{1,4\})\textbackslash\{\}s+(.*)$", stripped)
+
+12 if m:
+
+13 level = len(m.group(1))
+
+14 cmd = \{1: "section", 2: "subsection",
+
+15
+
+3: "subsubsection", 4: "paragraph"\}{[}level{]}
+
+16 out.append(f"\textbackslash\{\}\textbackslash\{\}\{cmd\}\{\{\{\_inline(m.group(2))\}\}\}")
+
+17 i += 1
+
+18 continue
+
+19
+
+20
+
+\section*{Gambar markdown !{[}alt{]}(url)}
+21 m = re.match(r"!\textbackslash\{\}{[}({[}\textasciicircum{}\textbackslash\{\}{]}{]}*)\textbackslash\{\}{]}\textbackslash\{\}(({[}\textasciicircum{}){]}+)\textbackslash\{\})", stripped)
+
+22 if m:
+
+23 src = m.group(2)
+
+24
+
+\section*{WMF/EMF tidak didukung LaTeX -\textgreater{} skip (tampilkan}
+25 catatan)
+
+43 if re.search(r"\textbackslash\{\}.wmf|\textbackslash\{\}.emf", src, re.I):
+
+26 out.append(r"\textbackslash\{\}textit\{{[}Gambar WMF tidak didukung
+
+27
+
+LaTeX{]}\}\%") i += 1
+
+28 continue
+
+29 fig\_count += 1
+
+30 alt = m.group(1) or f"Gambar \{fig\_count\}"
+
+31 out.append(r"\textbackslash\{\}begin\{figure\}{[}h{]}")
+
+32 out.append(r"\textbackslash\{\}centering")
+
+33 out.append(f"\textbackslash\{\}\textbackslash\{\}includegraphics{[}width=0.8\textbackslash\{\}\textbackslash\{\}textwidth
+
+34
+
+{]}\{\{\{src\}\}\}") out.append(f"\textbackslash\{\}\textbackslash\{\}caption\{\{\{\_escape(alt)\}\}\}")
+
+35 out.append(r"\textbackslash\{\}end\{figure\}")
+
+36 i += 1
+
+37 continue
+
+38
+
+39
+
+\section*{... (dipotong: penanganan tabel, daftar, blok kode, dan}
+40 paragraf biasa) latex\_export.py -- konversi heading, gambar, dan tabel
+
+Listing 4
+
+Pada tahap kompilasi, URL gambar yang tersimpan pada dokumen ditulis ulang menjadi jalur berkas lokal karena tectonic tidak dapat mengunduh berkas melalui HTTP.
+
+1 def compile\_latex\_pdf(latex\_source: str, output\_dir: str, jobname: str = "laporan") -\textgreater{} str:
+
+2
+
+"""Compile source LaTeX -\textgreater{} PDF via tectonic. Return path PDF.
+
+3
+
+4
+
+Gambar direferensikan lewat URL absolut; tectonic tidak bisa
+
+5 fetch http, jadi URL di-rewrite ke path lokal bila file ada di uploads/.
+
+6
+
+"""
+
+7 os.makedirs(output\_dir, exist\_ok=True)
+
+8
+
+9
+
+\section*{Rewrite URL gambar -\textgreater{} path lokal absolut (bila ada di}
+10 uploads/) def \_local\_path(url: str) -\textgreater{} str:
+
+11 m = re.search(r"/uploads/({[}0-9a-f-{]}\{36\})/images/({[}\textasciicircum{}){]}+)",
+
+12 url) if m:
+
+13 candidate = os.path.join("uploads", m.group(1), "
+
+14 images", m.group(2)) if os.path.exists(candidate):
+
+15
+
+44 return os.path.abspath(candidate).replace("\textbackslash\{\}\textbackslash\{\}", "/
+
+16
+
+") return url
+
+17
+
+18 tex\_source = re.sub(
+
+19 r"\textbackslash\{\}\textbackslash\{\}includegraphics(\textbackslash\{\}{[}{[}\textasciicircum{}\textbackslash\{\}{]}{]}*\textbackslash\{\}{]})?\textbackslash\{\}\{({[}\textasciicircum{}\}{]}+)\textbackslash\{\}\}",
+
+20 lambda mm: f"\textbackslash\{\}\textbackslash\{\}includegraphics\{mm.group(1) or ''\}\{\{\{
+
+21
+
+\_local\_path(mm.group(2))\}\}\}", latex\_source,
+
+22
+
+)
+
+23
+
+\section*{... (dipotong: penulisan berkas .tex dan pemanggilan}
+24 subprocess tectonic) latex\_export.py -- penulisan ulang jalur gambar sebelum
+
+Listing 5 kompilasi
+
+Catatan: nilai token autentikasi, kunci API penyedia LLM, dan isi berkas konﬁgu- rasi lingkungan (.env) tidak disertakan pada lampiran ini.
+
+
+\end{document}
+

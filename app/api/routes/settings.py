@@ -20,8 +20,67 @@ from app.schemas.model_config import (
     ModelConfigResponse,
 )
 from app.services.model_probe import probe_endpoint
+from app.services.ui_catalog import find_by_id, read_catalog, write_catalog
 
 router = APIRouter(prefix="/settings/model", tags=["settings"])
+
+
+async def _sync_created_config_to_chat_catalog(
+    db: AsyncSession,
+    user: User,
+    config: ModelConfig,
+    payload: ModelConfigRequest,
+) -> None:
+    """Expose a newly created provider in the chat model selector."""
+    catalog = await read_catalog(db, user.id)
+    llm = catalog["services"]["llm"]
+    profile_id = str(config.id)
+    model_id = f"{profile_id}:model"
+    profile = find_by_id(llm.get("profiles"), profile_id)
+
+    if profile is None:
+        profile = {
+            "id": profile_id,
+            "name": config.name,
+            "binding": payload.provider_type,
+            "provider": payload.provider_type,
+            "base_url": config.base_url,
+            "api_key": payload.api_key,
+            "api_version": "",
+            "extra_headers": {},
+            "proxy": "",
+            "models": [],
+        }
+        llm.setdefault("profiles", []).append(profile)
+    else:
+        profile["name"] = config.name
+        profile["binding"] = payload.provider_type
+        profile["provider"] = payload.provider_type
+        profile["base_url"] = config.base_url
+        if payload.api_key:
+            profile["api_key"] = payload.api_key
+
+    models = profile.setdefault("models", [])
+    model = find_by_id(models, model_id)
+    if model is None:
+        models.append(
+            {
+                "id": model_id,
+                "name": config.model_name,
+                "model": config.model_name,
+                "context_window": str(config.context_window),
+            }
+        )
+    else:
+        model["name"] = config.model_name
+        model["model"] = config.model_name
+        model["context_window"] = str(config.context_window)
+
+    if config.is_active or not llm.get("active_profile_id"):
+        llm["active_profile_id"] = profile_id
+        llm["active_model_id"] = model_id
+
+    await write_catalog(db, user.id, catalog)
 
 
 @router.get("", response_model=list[ModelConfigResponse])
@@ -73,11 +132,13 @@ async def create_setting(
         is_active=is_active,
         capabilities=json.dumps(payload.capabilities),
         provider_type=payload.provider_type,
+        capability_tier=payload.capability_tier,
         context_window=payload.context_window,
     )
     db.add(new_config)
     await db.commit()
     await db.refresh(new_config)
+    await _sync_created_config_to_chat_catalog(db, current_user, new_config, payload)
     return new_config
 
 
@@ -103,6 +164,7 @@ async def update_setting(
     existing.embedding_model = payload.embedding_model
     existing.capabilities = json.dumps(payload.capabilities)
     existing.provider_type = payload.provider_type
+    existing.capability_tier = payload.capability_tier
     existing.context_window = payload.context_window
     existing.updated_at = datetime.now(timezone.utc)
     

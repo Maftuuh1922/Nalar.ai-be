@@ -13,6 +13,13 @@ from app.services.document_tools import (
     search_in_document,
     search_web,
     fetch_webpage,
+    arxiv_search,
+    rag_query,
+    deep_critical_analysis,
+    reference_rank,
+    canvas_write,
+    cite_insert,
+    file_export,
     DOCUMENT_TOOLS,
 )
 
@@ -142,6 +149,9 @@ async def run_agentic_chat_stream(
     enable_document_tools: bool = True,
     custom_instructions: str | None = None,
     retrieval_top_k: int = 5,
+    capability_tier: str = "tidak_didukung",
+    capability: str | None = None,
+    capability_config: dict | None = None,
 ) -> AsyncGenerator[str, None]:
     """
     Menjalankan loop tool-calling agentic untuk merespons pesan user secara streaming.
@@ -154,7 +164,7 @@ async def run_agentic_chat_stream(
     """
     messages = []
     
-    markdown_instruction = "Gunakan format teks akademik yang rapi dan terstruktur (termasuk tabel jika ada data yang perlu dirangkum/dibandingkan) agar penjelasanmu seperti buku teks atau jurnal. DILARANG KERAS menggunakan emoji atau emoticon (seperti 😊, 📚, dll) dalam seluruh jawabanmu. Pertahankan nada formal dan ilmiah. JIKA kamu membuat tabel perbandingan atau rangkuman, WAJIB tambahkan 'Kesimpulan' singkat di bawah tabel tersebut yang menyoroti inti perbedaannya. JIKA pengguna meminta untuk dibuatkan diagram, struktur, mindmap, atau flowchart, berikan kode XML Draw.io murni di dalam blok kode ````drawio ... ````. Kode XML harus valid, diawali dengan <mxfile> dan diakhiri dengan </mxfile>. PENTING TENTANG DIAGRAM: Gunakan layout yang terstruktur dan luas, jangan sampai node saling bertumpuk (overlap). Beri jarak (spacing) yang jauh antar node (minimal 120px vertikal dan horisontal). Pastikan ukuran (width & height) setiap node cukup besar (misal width=180, height=80) atau disesuaikan otomatis dengan panjang teks (autosize=1). Gunakan panah yang rapi: edgeStyle=orthogonalEdgeStyle;rounded=1;. Gunakan warna profesional dan bedakan warna tiap level/cabang. Jika pengguna memberikan [Context Diagram Draw.io Saat Ini] pada promptnya, PENTING: modifikasi dan kembalikan SELURUH kode XML terbaru secara utuh yang sudah merangkum permintaannya."
+    markdown_instruction = "JIKA pengguna meminta untuk dibuatkan diagram, struktur, mindmap, atau flowchart, berikan kode XML Draw.io murni di dalam blok kode ````drawio ... ````. Kode XML harus valid, diawali dengan <mxfile> dan diakhiri dengan </mxfile>. PENTING TENTANG DIAGRAM: Gunakan layout yang terstruktur dan luas, jangan sampai node saling bertumpuk (overlap). Beri jarak (spacing) yang jauh antar node (minimal 120px vertikal dan horisontal). Pastikan ukuran (width & height) setiap node cukup besar (misal width=180, height=80) atau disesuaikan otomatis dengan panjang teks (autosize=1). Gunakan panah yang rapi: edgeStyle=orthogonalEdgeStyle;rounded=1;. Gunakan warna profesional dan bedakan warna tiap level/cabang. Jika pengguna memberikan [Context Diagram Draw.io Saat Ini] pada promptnya, PENTING: modifikasi dan kembalikan SELURUH kode XML terbaru secara utuh yang sudah merangkum permintaannya."
     # Aturan pemakaian tool. Tanpa ini, model kerap menjawab "maaf, saya tidak
     # bisa mencari di internet" padahal tool pencarian tersedia dan hanya
     # mengembalikan nol hasil pada percobaan pertama.
@@ -176,14 +186,20 @@ async def run_agentic_chat_stream(
         "kata kunci apa saja yang sudah dicoba, lalu tawarkan sudut pencarian lain.\n"
         "- Selalu sertakan judul dan URL sumber yang kamu pakai."
     )
-    # Daftar tool disaring sesuai Pengaturan > Percakapan. Kalau semua tool
-    # dimatikan, model dijalankan tanpa tool sama sekali.
-    _WEB_TOOL_NAMES = {"search_web", "fetch_webpage"}
-    active_tools = [
-        tool for tool in DOCUMENT_TOOLS
-        if (tool["function"]["name"] in _WEB_TOOL_NAMES and enable_web_tools)
-        or (tool["function"]["name"] not in _WEB_TOOL_NAMES and enable_document_tools)
-    ]
+    # Daftar tool disaring sesuai Pengaturan > Percakapan, dan capability_tier.
+    _WEB_TOOL_NAMES = {"search_web", "fetch_webpage", "arxiv_search"}
+    _ADVANCED_TOOL_NAMES = {"deep_critical_analysis", "reference_rank", "canvas_write", "cite_insert", "file_export"}
+    
+    active_tools = []
+    if capability_tier in ("agentic_dasar_terverifikasi", "agentic_penuh_terverifikasi"):
+        for tool in DOCUMENT_TOOLS:
+            name = tool["function"]["name"]
+            if name in _ADVANCED_TOOL_NAMES and capability_tier != "agentic_penuh_terverifikasi":
+                continue
+            if name in _WEB_TOOL_NAMES and enable_web_tools:
+                active_tools.append(tool)
+            elif name not in _WEB_TOOL_NAMES and enable_document_tools:
+                active_tools.append(tool)
 
     if active_tools:
         base_instruction = f"{markdown_instruction}\n\n{tool_instruction}"
@@ -207,6 +223,30 @@ async def run_agentic_chat_stream(
     else:
         messages.append({"role": "user", "content": user_message})
 
+    # Mode capability dari composer (deep_research / deep_question / visualize)
+    # — kalau ada, sematkan instruksi mode ke pesan user terakhir supaya model
+    # benar-benar menjalankan mode tersebut (sebelumnya capability & config
+    # dari start_turn dibuang di WS → semua mode jalan sebagai chat polos).
+    if capability or capability_config:
+        mode_bits = [f"Mode aktif: {capability}"] if capability else []
+        if capability_config:
+            try:
+                mode_bits.append(
+                    "Konfigurasi mode: "
+                    + json.dumps(capability_config, ensure_ascii=False)[:1200]
+                )
+            except (TypeError, ValueError):
+                pass
+        if capability == "journal":
+            mode_bits.append(
+                "MODE JURNAL ILMIAH: prioritas utama adalah ketepatan bukti, kebaruan yang dapat dipertahankan, dan keterlacakan sitasi. Bedakan fakta sumber, inferensi, dan usulan. Untuk naskah, gunakan struktur IMRaD/format yang diminta, jangan mengarang hasil, angka, DOI, atau referensi. Jika bukti kurang, buat daftar data yang harus dilengkapi."
+            )
+        mode_note = "\n".join(mode_bits)
+        if isinstance(messages[-1].get("content"), str):
+            messages[-1]["content"] += f"\n\n{mode_note}"
+        elif isinstance(messages[-1].get("content"), list):
+            messages[-1]["content"].append({"type": "text", "text": mode_note})
+
     documents_read = set()
     
     cumulative_usage = {
@@ -229,7 +269,9 @@ async def run_agentic_chat_stream(
         api_kwargs = {
             "model": model_name,
             "messages": messages,
-            "temperature": temperature,
+            # Mode jurnal harus lebih deterministik daripada percakapan umum;
+            # ini mengurangi variasi klaim dan format pada model murah.
+            "temperature": min(temperature, 0.3) if capability == "journal" else temperature,
             "stream": True,
             # Tanpa batas eksplisit banyak provider memakai default kecil (~1000 token),
             # sehingga laporan panjang terpotong di tengah halaman pertama.
@@ -402,6 +444,22 @@ async def run_agentic_chat_stream(
                     tool_result_str = await search_web(**tc_args)
                 elif tc_name == "fetch_webpage":
                     tool_result_str = await fetch_webpage(**tc_args)
+                elif tc_name == "arxiv_search":
+                    tc_args.setdefault("max_results", retrieval_top_k)
+                    tool_result_str = await arxiv_search(**tc_args)
+                elif tc_name == "rag_query":
+                    tc_args.setdefault("max_matches", retrieval_top_k)
+                    tool_result_str = await rag_query(db, user_id, **tc_args)
+                elif tc_name == "deep_critical_analysis":
+                    tool_result_str = await deep_critical_analysis(**tc_args)
+                elif tc_name == "reference_rank":
+                    tool_result_str = await reference_rank(**tc_args)
+                elif tc_name == "canvas_write":
+                    tool_result_str = await canvas_write(**tc_args)
+                elif tc_name == "cite_insert":
+                    tool_result_str = await cite_insert(**tc_args)
+                elif tc_name == "file_export":
+                    tool_result_str = await file_export(**tc_args)
                 else:
                     tool_result_str = json.dumps({"error": f"Unknown tool: {tc_name}"})
             except Exception as e:

@@ -1,19 +1,24 @@
 """Skema Pydantic untuk request/response autentikasi."""
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 
 from app.schemas.user import UserResponse
 
 
 class RegisterRequest(BaseModel):
-    email: EmailStr
+    username: str = Field(min_length=3, max_length=50)
     password: str = Field(min_length=8, max_length=128)
-    full_name: str | None = Field(default=None, max_length=255)
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    username: str
     password: str
+
+
+class RegisterResponse(BaseModel):
+    ok: bool = True
+    role: str = "user"
+    is_first_user: bool = False
 
 
 class TokenResponse(BaseModel):

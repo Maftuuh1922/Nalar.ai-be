@@ -35,6 +35,8 @@ class UserPreference(Base):
     chunk_size: Mapped[int] = mapped_column(Integer, nullable=False, default=512)
     chunk_overlap: Mapped[int] = mapped_column(Integer, nullable=False, default=64)
     retrieval_top_k: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    document_parsing_engine: Mapped[str] = mapped_column(String(30), nullable=False, default="text_only")
+    rag_engine: Mapped[str] = mapped_column(String(30), nullable=False, default="llamaindex")
 
     # --- Jaringan ---
     request_timeout: Mapped[int] = mapped_column(Integer, nullable=False, default=120)

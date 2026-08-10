@@ -33,5 +33,9 @@ class ModelConfig(Base):
     )
     # Perkiraan jendela konteks (token) untuk memangkas riwayat percakapan.
     context_window: Mapped[int] = mapped_column(Integer, nullable=False, default=65536, server_default="65536")
+    # Tier kemampuan agenik setelah melalui 3 tahap verifikasi.
+    capability_tier: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="tidak_didukung", server_default="tidak_didukung"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)

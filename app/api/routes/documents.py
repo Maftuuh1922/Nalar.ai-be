@@ -9,13 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.core.config import settings
-from app.core.encryption import decrypt_api_key
 from app.db.session import get_db
 from app.models.document import Document
-from app.models.model_config import ModelConfig
 from app.models.user import User
 from app.schemas.document import DocumentResponse
 from app.services import rag
+from app.services.model_selection import ModelSelectionError, resolve_embedding
 from app.services.preferences import get_preferences
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -58,11 +57,19 @@ async def _run_indexing(
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,
             )
+            # Cek ulang sebelum commit — dokumen mungkin sudah dihapus user
+            # selagi indexing berjalan (delete di endpoint lain).
+            still_exists = await db.get(Document, uuid.UUID(doc_id))
+            if still_exists is None:
+                return
             doc.status = "indexed"
         except Exception as exc:
             doc.status = "failed"
             doc.error_message = str(exc)[:900]
-        await db.commit()
+        try:
+            await db.commit()
+        except Exception:  # noqa: BLE001 — row sudah dihapus; abaikan
+            await db.rollback()
 
     await engine.dispose()
 
@@ -95,17 +102,13 @@ async def upload_document(
             detail=f"Format tidak didukung. Gunakan: {', '.join(ALLOWED_EXTENSIONS)}",
         )
 
-    # Cek konfigurasi model AI
-    model_cfg = await db.scalar(
-        select(ModelConfig).where(
-            ModelConfig.user_id == current_user.id,
-            ModelConfig.is_active == True
-        )
-    )
-    if model_cfg is None:
+    # Cek konfigurasi model embedding AI milik user
+    try:
+        emb = await resolve_embedding(db, current_user.id)
+    except ModelSelectionError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Tidak ada konfigurasi model AI yang aktif. Silakan atur dan aktifkan konfigurasi di halaman Pengaturan.",
+            detail=str(exc),
         )
 
     # Baca dan validasi ukuran file
@@ -145,9 +148,9 @@ async def upload_document(
         doc_id=str(doc_id),
         user_id=str(current_user.id),
         file_path=str(file_path),
-        base_url=model_cfg.base_url,
-        api_key=decrypt_api_key(model_cfg.api_key_encrypted) or "dummy",
-        embedding_model=model_cfg.embedding_model,
+        base_url=emb.base_url,
+        api_key=emb.api_key or "dummy",
+        embedding_model=emb.model_name,
         db_url=settings.DATABASE_URL,
         chunk_size=prefs.chunk_size,
         chunk_overlap=prefs.chunk_overlap,

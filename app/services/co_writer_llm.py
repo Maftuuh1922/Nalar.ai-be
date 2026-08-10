@@ -1,4 +1,4 @@
-"""Layanan AI untuk Co-Writer: edit draf penuh, auto-markdown, dan edit seleksi streaming.
+"""Layanan AI untuk Co-Writer: edit draf penuh, auto-struktur LaTeX, dan edit seleksi streaming.
 
 Pola pemanggilan model mengikuti ``deep_research``: konfigurasi LLM diresolusi
 lewat ``model_selection.resolve_llm`` (profil katalog atau cadangan
@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from typing import AsyncIterator
 
@@ -28,20 +29,53 @@ logger = logging.getLogger(__name__)
 _MAX_SELECTED_CHARS = 12000
 _MAX_DRAFT_CHARS = 40000
 
+
+def _timeout_dari_env(bawaan: int = 240) -> int:
+    """Batas waktu satu permintaan AI Co-Writer, detik.
+
+    Bawaannya longgar karena model penalaran (reasoning) menghabiskan sebagian
+    besar anggaran tokennya untuk berpikir sebelum satu kata jawaban keluar:
+    pada model aktif proyek ini, menulis ulang satu kalimat saja butuh ~73 detik
+    dengan 460 dari 500 token terpakai untuk penalaran. Batas 90 detik yang
+    dipakai sebelumnya membuat tiap permintaan nyata berakhir 504.
+    """
+    mentah = os.getenv("CO_WRITER_REQUEST_TIMEOUT_SECONDS", "").strip()
+    if not mentah:
+        return bawaan
+    try:
+        nilai = int(float(mentah))
+    except ValueError:
+        return bawaan
+    return nilai if nilai > 0 else bawaan
+
+
+CO_WRITER_REQUEST_TIMEOUT_SECONDS = _timeout_dari_env()
+
 _SYSTEM_CO_WRITER = (
     "Kamu adalah asisten penulisan akademik dan profesional yang mahir berbahasa "
-    "Indonesia. Balas HANYA dengan hasil teks final dalam format markdown — tanpa "
-    "pembuka, tanpa penutup, tanpa pagar ```, tanpa komentar tambahan."
+    "Indonesia. Draf ditulis dalam LaTeX, jadi balas HANYA dengan kode LaTeX untuk "
+    "badan dokumen — tanpa pembuka, tanpa penutup, tanpa pagar ```, tanpa komentar.\n"
+    "Aturan LaTeX:\n"
+    "- Judul memakai \\section{...}, \\subsection{...}, \\subsubsection{...}. "
+    "JANGAN memakai tanda pagar (#) gaya Markdown.\n"
+    "- Tebal \\textbf{...}, miring \\textit{...}, kode \\texttt{...}. "
+    "JANGAN memakai **teks** atau *teks*.\n"
+    "- Daftar memakai \\begin{itemize}/\\begin{enumerate} dengan \\item.\n"
+    "- Tabel memakai \\begin{tabular} dengan & sebagai pemisah sel dan \\\\ akhir baris.\n"
+    "- Escape karakter khusus: \\% \\& \\_ \\# untuk persen, dan, garis bawah, pagar.\n"
+    "- JANGAN menulis \\documentclass, \\usepackage, \\begin{document}, atau "
+    "\\end{document} — bagian itu sudah ada di draf."
 )
 
 _ACTION_PROMPTS: dict[str, str] = {
     "rewrite": (
         "Tulis ulang seluruh draf sesuai instruksi pengguna. Pertahankan struktur "
-        "markdown dan fakta yang ada; perbaiki alur, diksi, dan keruntutan."
+        "dan perintah LaTeX yang ada beserta faktanya; perbaiki alur, diksi, dan "
+        "keruntutan."
     ),
     "shorten": (
         "Ringkas seluruh draf secara signifikan: buang pengulangan dan kalimat "
-        "bertele-tele, pertahankan semua poin penting, judul, dan struktur markdown."
+        "bertele-tele, pertahankan semua poin penting, judul, dan struktur LaTeX."
     ),
     "expand": (
         "Kembangkan seluruh draf: tambahkan detail, contoh, dan penjelasan yang "
@@ -57,18 +91,21 @@ _MODE_PROMPTS: dict[str, str] = {
 }
 
 _SYSTEM_AUTOMARK = (
-    "Kamu adalah editor markdown yang teliti. Beri anotasi markdown pada teks "
-    "mentah berikut: tentukan judul (#), subjudul (##/###), tebal (**teks**), "
-    "miring (*teks*), daftar (- / 1.), dan kutipan (>) pada bagian yang memang "
-    "layak. JANGAN mengubah isi kalimat atau menambah/menghapus informasi — hanya "
-    "tambahkan penanda markdown. Balas HANYA teks hasil, tanpa komentar."
+    "Kamu adalah editor LaTeX yang teliti. Beri struktur LaTeX pada teks mentah "
+    "berikut: tentukan judul (\\section), subjudul (\\subsection/\\subsubsection), "
+    "tebal (\\textbf{...}), miring (\\textit{...}), dan daftar "
+    "(\\begin{itemize}/\\begin{enumerate} dengan \\item) pada bagian yang memang "
+    "layak. Escape karakter khusus: \\% \\& \\_ \\#.\n"
+    "JANGAN mengubah isi kalimat atau menambah/menghapus informasi — hanya "
+    "tambahkan perintah LaTeX. JANGAN menulis \\documentclass atau "
+    "\\begin{document}. Balas HANYA kode LaTeX hasil, tanpa komentar."
 )
 
 
 def _clean_llm_text(raw: str) -> str:
-    """Buang pagar markdown dan spasi berlebih dari balasan model."""
+    """Buang pagar kode dan spasi berlebih dari balasan model."""
     text = (raw or "").strip()
-    fence = re.match(r"^```(?:markdown|md|text)?\s*(.+?)```$", text, re.DOTALL)
+    fence = re.match(r"^```(?:latex|tex|markdown|md|text)?\s*(.+?)```$", text, re.DOTALL)
     if fence:
         text = fence.group(1).strip()
     return text
@@ -85,7 +122,8 @@ class CoWriterLLM:
         self._client = AsyncOpenAI(
             base_url=llm.base_url,
             api_key=llm.api_key or "dummy",
-            timeout=180.0,
+            timeout=float(CO_WRITER_REQUEST_TIMEOUT_SECONDS),
+            max_retries=0,
         )
         self._model = llm.model_name
 
@@ -286,10 +324,10 @@ def build_full_edit_prompt(
             + _truncate(context, 12000)
         )
     user_parts.append(
-        "Draf saat ini (markdown):\n\n" + _truncate(text, _MAX_DRAFT_CHARS)
+        "Draf saat ini (LaTeX):\n\n" + _truncate(text, _MAX_DRAFT_CHARS)
     )
     user_parts.append(
-        "\n\nBalas HANYA hasil teks final markdown, tanpa komentar atau pembuka."
+        "\n\nBalas HANYA kode LaTeX hasil akhir, tanpa komentar atau pembuka."
     )
     return system, "\n\n".join(user_parts)
 
@@ -315,10 +353,10 @@ def build_selection_prompt(
             + _truncate(context, 12000)
         )
     user_parts.append(
-        "Teks terpilih (markdown):\n\n" + _truncate(selected_text, _MAX_SELECTED_CHARS)
+        "Teks terpilih (LaTeX):\n\n" + _truncate(selected_text, _MAX_SELECTED_CHARS)
     )
     user_parts.append(
-        "\n\nBalas HANYA hasil teks final markdown untuk menggantikan teks terpilih, "
+        "\n\nBalas HANYA kode LaTeX untuk menggantikan teks terpilih, "
         "tanpa komentar atau pembuka."
     )
     return system, "\n\n".join(user_parts)

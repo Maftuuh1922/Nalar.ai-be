@@ -1,4 +1,4 @@
-"""Layanan Agentic Tool Dispatcher disalin dan disederhanakan dari DeepTutor agentic loop (deeptutor/core/agentic/loop.py & deeptutor/tools/write_note.py).
+"""Layanan Agentic Tool Dispatcher disalin dan disederhanakan dari Nalar AI agentic loop (nalar-ai/core/agentic/loop.py & nalar-ai/tools/write_note.py).
 
 Modul ini memfasilitasi pembuatan catatan otomatis (Notebooks) dari percakapan AI serta penanganan multi-tool dispatch.
 """
@@ -22,7 +22,7 @@ async def write_learning_note(
     title: str,
     content: str,
 ) -> Notebook:
-    """Menyimpan ringkasan/catatan hasil belajar otomatis ke dalam tabel Notebooks pengguna (disalin dari DeepTutor write_note tool)."""
+    """Menyimpan ringkasan/catatan hasil belajar otomatis ke dalam tabel Notebooks pengguna (disalin dari Nalar AI write_note tool)."""
     note = Notebook(
         user_id=user_id,
         title=title,

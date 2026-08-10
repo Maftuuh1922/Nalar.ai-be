@@ -16,8 +16,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
 from app.core.config import settings
-from app.core.encryption import decrypt_api_key
-from app.models.model_config import ModelConfig
 from app.models.notebook import Notebook
 from app.models.research_report import ResearchReport
 from app.models.user import User
@@ -25,6 +23,7 @@ from app.schemas.notebook import NotebookResponse
 from app.schemas.research import ResearchCreate, ResearchDetail, ResearchSummary, ResearchToNotebook
 from app.services.deep_research import run_research
 from app.services.docx_exporter import markdown_to_docx
+from app.services.model_selection import ModelSelectionError, resolve_llm
 
 router = APIRouter(prefix="/research", tags=["research"])
 
@@ -62,16 +61,12 @@ async def create_report(
     db: AsyncSession = Depends(get_db),
 ) -> ResearchReport:
     """Mulai riset baru; penulisan laporan berjalan di latar belakang."""
-    model_cfg = await db.scalar(
-        select(ModelConfig).where(
-            ModelConfig.user_id == current_user.id,
-            ModelConfig.is_active == True,  # noqa: E712
-        )
-    )
-    if model_cfg is None:
+    try:
+        llm = await resolve_llm(db, current_user.id)
+    except ModelSelectionError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Tidak ada konfigurasi model AI yang aktif. Atur dulu di halaman Pengaturan.",
+            detail=str(exc),
         )
 
     report = ResearchReport(
@@ -91,10 +86,10 @@ async def create_report(
     background_tasks.add_task(
         run_research,
         report_id=str(report.id),
-        base_url=model_cfg.base_url,
+        base_url=llm.base_url,
         # Endpoint lokal boleh tanpa API key, sama seperti di menu chat.
-        api_key=decrypt_api_key(model_cfg.api_key_encrypted) or "dummy",
-        model_name=model_cfg.model_name,
+        api_key=llm.api_key or "dummy",
+        model_name=llm.model_name,
         db_url=settings.DATABASE_URL,
     )
     return report

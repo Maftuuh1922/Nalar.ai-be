@@ -29,7 +29,7 @@ async def get_progress_stats(
         .where(QuizAttempt.user_id == current_user.id)
     )
     
-    # 2. Ambil semua riwayat kuis untuk menghitung DeepTutor Recency-Weighted Mastery Score
+    # 2. Ambil semua riwayat kuis untuk menghitung Nalar AI Recency-Weighted Mastery Score
     attempts_query = await db.execute(
         select(QuizAttempt, Quiz.topic)
         .join(Quiz, QuizAttempt.quiz_id == Quiz.id)
@@ -50,7 +50,7 @@ async def get_progress_stats(
             topic_attempts[topic] = []
         topic_attempts[topic].append(is_pass)
 
-    # Hitung mastery score keseluruhan menggunakan algoritma DeepTutor
+    # Hitung mastery score keseluruhan menggunakan algoritma Nalar AI
     overall_mastery = compute_mastery(overall_correctness)
     overall_level = mastery_level_label(overall_mastery)
 

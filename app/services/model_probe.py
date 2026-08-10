@@ -183,21 +183,28 @@ async def probe_endpoint(
             "message": "Nama model belum diisi",
         })
 
-    # 3. Tool calling — fitur wajib untuk mode agen (pencarian web, baca dokumen).
+    # 3. Model Capability Verification (3 Tahap)
+    capability_tier = "tidak_didukung"
     if model_name:
+        import json
+        passed_stage1 = False
+        passed_stage2 = False
+        passed_stage3 = False
+        
+        # Stage 1: Basic Format (Kalkulator)
         try:
             resp, ms = await _timed(client.chat.completions.create(
                 model=model_name,
-                messages=[{"role": "user", "content": "Berapa cuaca di Jakarta? Gunakan tool."}],
+                messages=[{"role": "user", "content": "Berapa 15 ditambah 27? Gunakan kalkulator."}],
                 tools=[{
                     "type": "function",
                     "function": {
-                        "name": "get_weather",
-                        "description": "Ambil cuaca sebuah kota",
+                        "name": "calculator",
+                        "description": "Hitung operasi matematika",
                         "parameters": {
                             "type": "object",
-                            "properties": {"city": {"type": "string"}},
-                            "required": ["city"],
+                            "properties": {"expression": {"type": "string"}},
+                            "required": ["expression"],
                         },
                     },
                 }],
@@ -205,27 +212,171 @@ async def probe_endpoint(
             ))
             called = bool(resp.choices and getattr(resp.choices[0].message, "tool_calls", None))
             if called:
+                passed_stage1 = True
                 caps.add("tools")
                 probes.append({
-                    "name": "tools", "label": "Pemanggilan tool", "status": "ok",
-                    "message": "Model memanggil tool dengan benar", "latency_ms": ms,
+                    "name": "stage1_basic", "label": "Tahap 1: Tool Dasar", "status": "ok",
+                    "message": "Berhasil memanggil tool", "latency_ms": ms,
                 })
             else:
                 probes.append({
-                    "name": "tools", "label": "Pemanggilan tool", "status": "warn",
-                    "message": "Permintaan diterima tapi model tidak memanggil tool — mode agen bisa kurang andal",
-                    "latency_ms": ms,
+                    "name": "stage1_basic", "label": "Tahap 1: Tool Dasar", "status": "fail",
+                    "message": "Gagal memanggil tool", "latency_ms": ms,
                 })
         except asyncio.TimeoutError:
             probes.append({
-                "name": "tools", "label": "Pemanggilan tool", "status": "warn",
+                "name": "stage1_basic", "label": "Tahap 1: Tool Dasar", "status": "warn",
                 "message": f"Tidak menjawab dalam {int(PROBE_TIMEOUT)} detik",
             })
         except Exception as exc:
             probes.append({
-                "name": "tools", "label": "Pemanggilan tool", "status": "fail",
-                "message": f"Tidak mendukung tool: {_short(exc)}",
+                "name": "stage1_basic", "label": "Tahap 1: Tool Dasar", "status": "fail",
+                "message": _short(exc),
             })
+            
+        # Stage 2: Multi-langkah (kalau lolos stage 1)
+        if passed_stage1:
+            try:
+                messages = [
+                    {"role": "user", "content": "Cari cuaca di Jakarta hari ini, lalu simpan datanya menggunakan tool simpan_data."},
+                    {"role": "assistant", "content": None, "tool_calls": [{
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "cek_cuaca", "arguments": '{"lokasi":"Jakarta"}'}
+                    }]},
+                    {"role": "tool", "tool_call_id": "call_1", "content": "Cerah, 32 derajat Celcius"}
+                ]
+                resp, ms = await _timed(client.chat.completions.create(
+                    model=model_name,
+                    messages=messages,
+                    tools=[
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": "cek_cuaca",
+                                "description": "Cek cuaca",
+                                "parameters": {"type": "object", "properties": {"lokasi": {"type": "string"}}, "required": ["lokasi"]},
+                            },
+                        },
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": "simpan_data",
+                                "description": "Simpan data",
+                                "parameters": {"type": "object", "properties": {"data": {"type": "string"}}, "required": ["data"]},
+                            },
+                        }
+                    ],
+                    max_tokens=64,
+                ))
+                called = False
+                if resp.choices and getattr(resp.choices[0].message, "tool_calls", None):
+                    for tc in resp.choices[0].message.tool_calls:
+                        if tc.function.name == "simpan_data":
+                            called = True
+                
+                if called:
+                    passed_stage2 = True
+                    probes.append({
+                        "name": "stage2_multi", "label": "Tahap 2: Multi-langkah", "status": "ok",
+                        "message": "Berhasil memanggil tool berdasarkan konteks", "latency_ms": ms,
+                    })
+                else:
+                    probes.append({
+                        "name": "stage2_multi", "label": "Tahap 2: Multi-langkah", "status": "fail",
+                        "message": "Gagal memakai konteks tool sebelumnya", "latency_ms": ms,
+                    })
+            except Exception as exc:
+                probes.append({
+                    "name": "stage2_multi", "label": "Tahap 2: Multi-langkah", "status": "fail",
+                    "message": _short(exc),
+                })
+                
+        # Stage 3: Skema kompleks (kalau lolos stage 2)
+        if passed_stage2:
+            try:
+                resp, ms = await _timed(client.chat.completions.create(
+                    model=model_name,
+                    messages=[{"role": "user", "content": "Tulis teks dan berikan sitasi dari google.com dengan judul 'Google'."}],
+                    tools=[{
+                        "type": "function",
+                        "function": {
+                            "name": "canvas_write",
+                            "description": "Tulis ke kanvas dengan sitasi",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "content": {"type": "string"},
+                                    "citations": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "title": {"type": "string"},
+                                                "url": {"type": "string"}
+                                            },
+                                            "required": ["title", "url"]
+                                        }
+                                    }
+                                },
+                                "required": ["content", "citations"],
+                            },
+                        },
+                    }],
+                    max_tokens=150,
+                ))
+                
+                called = False
+                if resp.choices and getattr(resp.choices[0].message, "tool_calls", None):
+                    tc = resp.choices[0].message.tool_calls[0]
+                    if tc.function.name == "canvas_write":
+                        try:
+                            args = json.loads(tc.function.arguments)
+                            if "citations" in args and isinstance(args["citations"], list) and len(args["citations"]) > 0:
+                                passed_stage3 = True
+                                called = True
+                        except:
+                            pass
+                            
+                if called:
+                    probes.append({
+                        "name": "stage3_complex", "label": "Tahap 3: Skema Kompleks", "status": "ok",
+                        "message": "Berhasil mengisi struktur bersarang", "latency_ms": ms,
+                    })
+                else:
+                    probes.append({
+                        "name": "stage3_complex", "label": "Tahap 3: Skema Kompleks", "status": "fail",
+                        "message": "Gagal mematuhi skema JSON bersarang", "latency_ms": ms,
+                    })
+            except Exception as exc:
+                probes.append({
+                    "name": "stage3_complex", "label": "Tahap 3: Skema Kompleks", "status": "fail",
+                    "message": _short(exc),
+                })
+                
+        if passed_stage1 and passed_stage2 and passed_stage3:
+            capability_tier = "agentic_penuh_terverifikasi"
+        elif passed_stage1 and passed_stage2:
+            capability_tier = "agentic_dasar_terverifikasi"
+        elif passed_stage1:
+            capability_tier = "fallback_react"
+            
+        if not passed_stage1:
+            try:
+                resp, ms = await _timed(client.chat.completions.create(
+                    model=model_name,
+                    messages=[{"role": "user", "content": "Tulis persis 'ACTION: kalkulator(1+1)'."}],
+                    max_tokens=20,
+                ))
+                text_out = resp.choices[0].message.content if resp.choices else ""
+                if "ACTION:" in text_out and "kalkulator" in text_out:
+                    capability_tier = "fallback_react"
+                    probes.append({
+                        "name": "stage0_react", "label": "Fallback ReAct", "status": "ok",
+                        "message": "Model mendukung format teks terstruktur", "latency_ms": ms,
+                    })
+            except:
+                pass
     else:
         probes.append({
             "name": "tools", "label": "Pemanggilan tool", "status": "skip",
@@ -301,6 +452,7 @@ async def probe_endpoint(
         "reachable": reachable,
         "capabilities": ordered,
         "provider_type": guess_provider_type(base_url),
+        "capability_tier": capability_tier,
         "context_window": guess_context_window(model_name),
         "available_models": available[:200],
         "probes": probes,
