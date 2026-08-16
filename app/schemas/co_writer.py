@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 class CoWriterCreate(BaseModel):
     title: str | None = Field(None, max_length=255, description="Judul draf; bila kosong diturunkan dari isi")
     content: str = Field("", description="Isi draf markdown")
+    folder_id: UUID | None = Field(None, description="Folder tujuan; null = simpan di akar")
 
 
 class CoWriterUpdate(BaseModel):
@@ -44,6 +45,44 @@ class CoWriterSummaryOut(BaseModel):
     created_at: int
     updated_at: int
     preview: str
+    folder_id: UUID | None = Field(None, description="Folder tempat draf disimpan; null = akar")
+
+
+# ── Folder (pengelompokan draf, boleh bersarang) ────────────────────────────
+
+
+class CoWriterFolderCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    parent_id: UUID | None = Field(None, description="Folder induk; null = folder akar")
+    color: str | None = Field(None, max_length=7, description='Warna aksen "#rrggbb"')
+
+
+class CoWriterFolderUpdate(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=255, description="null = tidak diubah")
+    color: str | None = Field(None, max_length=7, description="null = tidak diubah")
+    # Dibedakan dari "tidak dikirim" lewat model_fields_set: mengirim
+    # "parent_id": null berarti pindahkan folder ke akar.
+    parent_id: UUID | None = Field(None, description="Induk baru; kirim null untuk memindahkan ke akar")
+
+
+class CoWriterFolderResponse(BaseModel):
+    id: UUID
+    name: str
+    parent_id: UUID | None
+    color: str | None
+    document_count: int = Field(
+        ...,
+        description="Jumlah draf di folder ini DAN seluruh subfoldernya — sama dengan yang tampil saat folder dipilih",
+    )
+    created_at: int
+
+
+class CoWriterFolderListOut(BaseModel):
+    folders: list[CoWriterFolderResponse]
+
+
+class CoWriterMoveRequest(BaseModel):
+    folder_id: UUID | None = Field(None, description="Folder tujuan; null = keluarkan ke akar")
 
 
 class CoWriterListOut(BaseModel):

@@ -464,13 +464,13 @@ def ast_to_html(ast: DocumentAst) -> str:
             keluar.append("</section>")
         elif node.type == "heading":
             tag = f"h{min(node.level or 1, 4)}"
-            teks = _html_escape(node.text)
+            teks = _inline_md(node.text)
             if node.align == "center":
                 keluar.append(f"<{tag} class='center-block{kelas(node)}'>{teks}</{tag}>")
             else:
                 keluar.append(f"<{tag} class='{kelas(node).strip() or 'section'}'>{teks}</{tag}>")
         elif node.type == "paragraph":
-            teks = _html_escape(node.text)
+            teks = _inline_md(node.text)
             if node.align == "center":
                 keluar.append(f"<p class='center-block'>{teks}</p>")
             else:
@@ -481,7 +481,7 @@ def ast_to_html(ast: DocumentAst) -> str:
             if img.width_ratio:
                 lebar = f" style='width: min(90%, {img.width_ratio * 100:.1f}%)'"
             keluar.append(f"<figure><img src='{_html_escape(img.src)}'{lebar}>"
-                          f"<figcaption class='caption'>{_html_escape(node.text or 'Gambar')}</figcaption></figure>")
+                          f"<figcaption class='caption'>{_inline_md(node.text or 'Gambar')}</figcaption></figure>")
         elif node.type == "table" and node.table:
             rows = node.table.rows
             if not rows:
@@ -490,20 +490,20 @@ def ast_to_html(ast: DocumentAst) -> str:
             for i, row in enumerate(rows):
                 tag = "th" if (node.table.header and i == 0) else "td"
                 keluar.append("<tr>" + "".join(
-                    f"<{tag}>{_html_escape(c or '&nbsp;')}</{tag}>" for c in row
+                    f"<{tag}>{_inline_md(c) if c else '&nbsp;'}</{tag}>" for c in row
                 ) + "</tr>")
             keluar.append("</tbody></table>")
         elif node.type == "list":
             keluar.append("<ul>")
             for anak in node.children:
-                keluar.append(f"<li>{_html_escape(anak.text)}</li>")
+                keluar.append(f"<li>{_inline_md(anak.text)}</li>")
             keluar.append("</ul>")
         elif node.type == "code":
             keluar.append(f"<pre>{_html_escape(node.text)}</pre>")
         elif node.type == "blockquote":
-            keluar.append(f"<blockquote>{_html_escape(node.text)}</blockquote>")
+            keluar.append(f"<blockquote>{_inline_md(node.text)}</blockquote>")
         elif node.type == "citation_marker":
-            keluar.append(f"<p class='citation'>{_html_escape(node.text)}</p>")
+            keluar.append(f"<p class='citation'>{_inline_md(node.text)}</p>")
         elif node.type == "page_break":
             keluar.append("<div class='page-break'></div>")
 
@@ -518,3 +518,46 @@ def _html_escape(text: str) -> str:
         text.replace("&", "&amp;").replace("<", "&lt;")
         .replace(">", "&gt;").replace('"', "&quot;")
     )
+
+
+# Inline markdown → HTML: **tebal**, *miring*/_miring_, `kode`, ~~coret~~,
+# [teks](url). Jalur AST (preview mode Sumber & PDF) tidak lewat markdown2, jadi
+# tanpa ini penanda inline tercetak harfiah ("banyak bintang"). Blok kode (<pre>)
+# sengaja TIDAK diproses supaya isinya tetap apa adanya.
+_MD_CODE = re.compile(r"`([^`]+)`")
+_MD_LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
+_MD_BOLD = re.compile(r"\*\*(.+?)\*\*|__(.+?)__")
+_MD_STRIKE = re.compile(r"~~(.+?)~~")
+_MD_ITALIC_STAR = re.compile(r"(?<!\*)\*(?!\s)([^*\n]+?)\*(?!\*)")
+_MD_ITALIC_US = re.compile(r"(?<!\w)_(?!\s)([^_\n]+?)_(?!\w)")
+
+
+def _inline_md(text: str) -> str:
+    """Escape HTML lalu ubah penanda inline markdown jadi tag yang benar."""
+    if not text:
+        return _html_escape(text)
+    simpanan: list[str] = []
+
+    def _stash(fragmen: str) -> str:
+        simpanan.append(fragmen)
+        return f"\x00{len(simpanan) - 1}\x00"
+
+    # 1) Amankan span kode dulu (isinya tak boleh ditafsir sebagai emfasis).
+    hasil = _MD_CODE.sub(
+        lambda m: _stash(f"<code>{_html_escape(m.group(1))}</code>"), text
+    )
+    # 2) Escape sisa teks; placeholder \x00..\x00 tak punya &<>" jadi selamat.
+    hasil = _html_escape(hasil)
+    # 3) Tautan sebelum emfasis, lalu diamankan agar URL ber-_ tak ikut miring.
+    hasil = _MD_LINK.sub(
+        lambda m: _stash(f'<a href="{m.group(2)}">{m.group(1)}</a>'), hasil
+    )
+    # 4) Tebal dulu (agar ** tak tertukar dengan *), lalu coret, lalu miring.
+    hasil = _MD_BOLD.sub(lambda m: f"<strong>{m.group(1) or m.group(2)}</strong>", hasil)
+    hasil = _MD_STRIKE.sub(lambda m: f"<del>{m.group(1)}</del>", hasil)
+    hasil = _MD_ITALIC_STAR.sub(lambda m: f"<em>{m.group(1)}</em>", hasil)
+    hasil = _MD_ITALIC_US.sub(lambda m: f"<em>{m.group(1)}</em>", hasil)
+    # 5) Kembalikan span kode & tautan.
+    for i, fragmen in enumerate(simpanan):
+        hasil = hasil.replace(f"\x00{i}\x00", fragmen)
+    return hasil

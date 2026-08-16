@@ -351,9 +351,12 @@ def test_libreoffice_concurrency_profile_terisolasi(tmp_path: Path, monkeypatch)
         pid = 12345
 
         def __init__(self, cmd, **kwargs):
-            # Ekstrak --env:UserInstallation=file:///... dari cmd
+            # Ekstrak -env:UserInstallation=file:///... dari cmd. Bentuk SATU
+            # strip (`-env:`) memang yang dipakai kode: LibreOffice 26.2+
+            # MENOLAK bentuk dua strip (`--env:`). `startswith("-env:")` tidak
+            # keliru cocok dengan `--env:` (char kedua `-` vs `e`).
             for arg in cmd:
-                if arg.startswith("--env:UserInstallation="):
+                if arg.startswith("-env:UserInstallation="):
                     seen_profiles.append(arg)
             # Tulis file sesuai nama yang dicek _convert_via_libreoffice:
             # out_dir / (pdf.stem + ".docx")

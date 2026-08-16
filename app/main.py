@@ -51,7 +51,6 @@ from app.api.routes.stub_endpoints import (
     questions_extra,
     quiz_judge_router,
 )
-# from app.api.routes.storm import router as storm_router
 from app.core.config import settings
 from app.db.base import Base
 from sqlalchemy import select, func
@@ -62,6 +61,7 @@ from app.models.user import User
 # Import model agar terdaftar ke Base.metadata (create_all saat startup)
 from app.models.co_writer_checkpoint import CoWriterCheckpoint  # noqa: F401
 from app.models.co_writer_file import CoWriterFile  # noqa: F401
+from app.models.co_writer_folder import CoWriterFolder  # noqa: F401
 from app.models.journal import (  # noqa: F401
     CitationCategory,
     JournalGroup,
@@ -158,7 +158,6 @@ app.include_router(settings_extra, prefix=settings.API_PREFIX)
 app.include_router(chat_extra, prefix=settings.API_PREFIX)
 app.include_router(multiuser_router, prefix=settings.API_PREFIX)
 app.include_router(quiz_judge_router, prefix=settings.API_PREFIX)
-# app.include_router(storm_router, prefix=settings.API_PREFIX)
 
 
 @app.get(f"{settings.API_PREFIX}/health", tags=["health"])

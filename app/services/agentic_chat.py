@@ -164,7 +164,28 @@ async def run_agentic_chat_stream(
     """
     messages = []
     
-    markdown_instruction = "JIKA pengguna meminta untuk dibuatkan diagram, struktur, mindmap, atau flowchart, berikan kode XML Draw.io murni di dalam blok kode ````drawio ... ````. Kode XML harus valid, diawali dengan <mxfile> dan diakhiri dengan </mxfile>. PENTING TENTANG DIAGRAM: Gunakan layout yang terstruktur dan luas, jangan sampai node saling bertumpuk (overlap). Beri jarak (spacing) yang jauh antar node (minimal 120px vertikal dan horisontal). Pastikan ukuran (width & height) setiap node cukup besar (misal width=180, height=80) atau disesuaikan otomatis dengan panjang teks (autosize=1). Gunakan panah yang rapi: edgeStyle=orthogonalEdgeStyle;rounded=1;. Gunakan warna profesional dan bedakan warna tiap level/cabang. Jika pengguna memberikan [Context Diagram Draw.io Saat Ini] pada promptnya, PENTING: modifikasi dan kembalikan SELURUH kode XML terbaru secara utuh yang sudah merangkum permintaannya."
+    # Diagram dikirim sebagai Mermaid, bukan XML Draw.io. Frontend merender
+    # Mermaid secara lokal (components/Mermaid.tsx) sehingga diagram tampil
+    # tanpa koneksi internet dan warnanya mengikuti tema aplikasi. XML Draw.io
+    # dulu dipakai di sini tapi tidak punya renderer di frontend, jadi hasilnya
+    # muncul sebagai teks XML mentah di dalam gelembung chat.
+    markdown_instruction = (
+        "JIKA pengguna meminta untuk dibuatkan diagram, struktur, mindmap, atau "
+        "flowchart, berikan kode Mermaid murni di dalam blok kode ```mermaid ... ```. "
+        "Kode harus valid dan diawali deklarasi jenis diagram Mermaid yang sesuai "
+        "(`flowchart TD`, `flowchart LR`, `sequenceDiagram`, `mindmap`, `erDiagram`, "
+        "`classDiagram`, atau `stateDiagram-v2`). "
+        "PENTING TENTANG DIAGRAM: gunakan label yang singkat dan jelas, bungkus teks "
+        "yang mengandung spasi atau tanda baca dengan tanda kutip ganda, dan hindari "
+        "karakter yang merusak sintaks Mermaid. Susun alur secara berjenjang supaya "
+        "mudah dibaca, dan pakai bentuk node yang bermakna: `[...]` untuk proses, "
+        "`{...}` untuk keputusan, `([...])` untuk titik awal/akhir. Beri gaya warna "
+        "lewat `classDef` dan `class` untuk membedakan tiap level atau cabang. "
+        "Jika pengguna memberikan [Context Diagram Mermaid Saat Ini] pada promptnya, "
+        "PENTING: modifikasi dan kembalikan SELURUH kode Mermaid terbaru secara utuh "
+        "yang sudah merangkum permintaannya."
+    )
+
     # Aturan pemakaian tool. Tanpa ini, model kerap menjawab "maaf, saya tidak
     # bisa mencari di internet" padahal tool pencarian tersedia dan hanya
     # mengembalikan nol hasil pada percobaan pertama.

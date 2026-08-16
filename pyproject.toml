@@ -23,7 +23,6 @@ dependencies = [
     "chromadb>=0.6",
     "cryptography>=44",
     "aiofiles>=24",
-    "knowledge-storm>=1.1.1",
     "duckduckgo-search>=8.1.1",
     "python-docx>=1.2.0",
     "tokenizers>=0.21.0",

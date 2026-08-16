@@ -141,7 +141,10 @@ def _convert_via_libreoffice(pdf_path: Path, docx_path: Path) -> str:
     cmd = [
         soffice,
         "--headless",
-        f"--env:UserInstallation=file:///{profile_dir.as_posix()}",
+        # Bentuk SATU strip (`-env:`). LibreOffice 26.2+ MENOLAK bentuk dua strip
+        # (`--env:`) dengan "Error in option" → rc=1 (teks bantuan ke stdout),
+        # sehingga fallback impor ini mati diam-diam di versi baru.
+        f"-env:UserInstallation=file:///{profile_dir.as_posix()}",
         "--infilter=writer_pdf_import",
         "--convert-to",
         "docx",
@@ -179,7 +182,10 @@ def _convert_via_libreoffice(pdf_path: Path, docx_path: Path) -> str:
         result_rc = proc.returncode
         produced = out_dir / (pdf_path.stem + ".docx")
         if result_rc != 0:
-            return f"LibreOffice returncode {result_rc}: {(stderr or '')[-300:]}"
+            # LibreOffice menulis error argumen ke stdout, bukan stderr —
+            # sertakan keduanya supaya pesan tidak kosong.
+            pesan = (stderr or "").strip() or (stdout or "").strip()
+            return f"LibreOffice returncode {result_rc}: {pesan[-300:]}"
         if not produced.exists():
             return "LibreOffice selesai tapi DOCX tidak dihasilkan"
         if produced.resolve() != docx_path.resolve():

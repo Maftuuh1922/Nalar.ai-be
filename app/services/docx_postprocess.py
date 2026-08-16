@@ -2,7 +2,12 @@
 
 - Ubah paragraf berukuran besar (>= 14pt) dengan pola bab/sub-bab menjadi
   style Heading 1/2/3 (bukan hanya Normal) supaya struktur tampil di editor.
-- Cover page: elemen halaman pertama (sebelum 'BAB 1') dibuat rata tengah.
+- Cover page: elemen halaman pertama (sebelum 'BAB 1') dibuat rata tengah,
+  TAPI hanya bila paragrafnya belum membawa posisi sendiri (lihat
+  ``_punya_indent``) — pdf2docx sudah menaruh geometri sejati tiap baris di
+  ``w:ind``, dan merata-tengahkan di atasnya justru menggeser teks.
+- Buang skala lebar karakter ``w:w`` (lihat ``_strip_char_scaling``): nilainya
+  di luar spesifikasi dan membuat renderer mengabaikan ``w:jc``.
 """
 from __future__ import annotations
 
@@ -14,6 +19,14 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Pt
+
+# Versi pipeline impor PDF→DOCX. Dinaikkan setiap kali post-processing di sini
+# berubah supaya dokumen yang diimpor dengan pipeline lama dibangun ulang secara
+# otomatis (lihat auto-heal di `_prepare_onlyoffice_docx`, co_writer.py). Sidecar
+# `uploads/{id}/onlyoffice/pipeline.json` menyimpan versi yang dipakai tiap
+# dokumen; bila lebih kecil dari nilai ini DAN pengguna belum menyunting, DOCX
+# kerja dibuang lalu dibangun ulang dari PDF asli.
+_PIPELINE_IMPOR_VERSI = 2
 
 _BAB = re.compile(r"^(?:bab|chapter)\s+[ivxlcdm\d]+", re.I)
 _SUB = re.compile(r"^\d+(\.\d+){1,2}\s+\S")
@@ -50,14 +63,63 @@ def _remove_heading_numbering(p) -> None:
 
 
 def _center_para(p) -> None:
+    """Rata tengah paragraf, sekaligus buang indent yang jadi acuan lamanya.
+
+    Rata tengah menghitung titik tengah dari kotak SETELAH indent dipotong.
+    Kalau ``w:ind`` dibiarkan, teks jadi tengah-nya kotak yang tepinya sudah
+    tergeser — bukan tengah badan halaman. Semua atribut ``w:ind`` bersifat
+    posisi (left/start, right/end, firstLine, hanging), jadi elemennya dibuang
+    seluruhnya.
+    """
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    pPr = p._p.find(qn("w:pPr"))
+    if pPr is not None:
+        for ind in pPr.findall(qn("w:ind")):
+            pPr.remove(ind)
+
+
+# Batas twips di mana indent dianggap sengaja diset, bukan sisa pembulatan.
+# w:ind bersatuan twips (1/20 pt), jadi 40 twips = 2pt.
+_AMBANG_INDENT_TWIPS = 40
+
+_ATTR_INDENT_HORIZONTAL = ("w:left", "w:start", "w:right", "w:end")
+
+
+def _punya_indent(p) -> bool:
+    """True bila paragraf membawa indent kiri/kanan yang berarti.
+
+    Dipakai untuk mengenali paragraf yang posisinya sudah ditentukan pdf2docx
+    (terukur akurat ~0.1pt terhadap PDF asli) supaya tidak ditimpa perataan
+    paksa. Nilai dibaca dari atribut XML mentah — satuannya twips, BUKAN EMU
+    seperti ``paragraph_format.left_indent`` yang sudah dikonversi python-docx.
+    """
+    pPr = p._p.find(qn("w:pPr"))
+    if pPr is None:
+        return False
+    for ind in pPr.findall(qn("w:ind")):
+        for attr in _ATTR_INDENT_HORIZONTAL:
+            raw = ind.get(qn(attr))
+            if raw is None:
+                continue
+            try:
+                if abs(int(raw)) > _AMBANG_INDENT_TWIPS:
+                    return True
+            except ValueError:
+                continue
+    return False
 
 
 def postprocess_docx(path: str | Path) -> dict:
     """Perbaiki DOCX hasil konversi: heading & cover. Return statistik."""
     path = Path(path)
     doc = Document(str(path))
-    stats = {"heading1": 0, "heading2": 0, "heading3": 0, "cover_center": 0}
+    stats = {
+        "heading1": 0,
+        "heading2": 0,
+        "heading3": 0,
+        "cover_center": 0,
+        "cover_center_skipped": 0,
+    }
 
     paragraphs = doc.paragraphs
     bab_start = len(paragraphs)
@@ -91,6 +153,14 @@ def postprocess_docx(path: str | Path) -> dict:
             continue
 
         if i < bab_start and size >= 13:
+            # Paragraf yang sudah membawa indent posisinya ditentukan konverter
+            # dan akurat terhadap PDF asli; merata-tengahkannya menggeser teks
+            # (terukur sampai 97pt pada halaman cover). Perataan paksa hanya
+            # untuk sumber tanpa data posisi: fallback LibreOffice, markdown,
+            # atau HTML.
+            if _punya_indent(p):
+                stats["cover_center_skipped"] += 1
+                continue
             _center_para(p)
             stats["cover_center"] += 1
 
@@ -115,6 +185,64 @@ _NO_SPASI_SEBELUM = set(".,;:!?)]}%‰")
 
 # Karakter yang TIDAK boleh diikuti spasi (kurung buka, dolar, dll).
 _NO_SPASI_SESUDAH = set("([{$")
+
+# Selisih ukuran font (pt) yang dianggap "beda ukuran" saat membandingkan dua
+# run bertetangga. Longgar sedikit supaya pembulatan half-point tidak terhitung.
+_TOLERANSI_UKURAN_PT = 0.05
+
+
+def _ukuran_run(r) -> float | None:
+    """Ukuran efektif run dalam pt (dari w:sz half-point), atau None.
+
+    ``r.font.size`` membaca ``rPr/w:sz`` langsung; bila run tidak menyetelnya,
+    rantai style character ditelusuri sebagai fallback.
+    """
+    if r.font.size is not None:
+        return r.font.size.pt
+    try:
+        style = r.style
+        while style is not None:
+            if style.font.size is not None:
+                return style.font.size.pt
+            style = style.base_style
+    except Exception:  # noqa: BLE001 — ukuran opsional, jangan gagalkan proses
+        return None
+    return None
+
+
+def _digeser_vertikal(r) -> bool:
+    """True bila run superskrip/subskrip atau digeser lewat w:position."""
+    rPr = r._r.find(qn("w:rPr"))
+    if rPr is None:
+        return False
+    if rPr.find(qn("w:vertAlign")) is not None:
+        return True
+    pos = rPr.find(qn("w:position"))
+    if pos is not None:
+        try:
+            return int(pos.get(qn("w:val")) or 0) != 0
+        except (TypeError, ValueError):
+            return False
+    return False
+
+
+def _batas_kata_sungguhan(prev_run, curr_run) -> bool:
+    """True bila peralihan dua run memang batas antar-kata.
+
+    pdf2docx tidak cuma memecah per kata: glyph berukuran khusus dipecah jadi
+    run sendiri, mis. logo "LaTeX" jadi ``['…LUARAN L', 'A', 'TEX']`` dengan
+    ``w:sz`` 20 di antara tetangga 29. Menyisipkan spasi di situ memecah kata
+    menjadi "L A TEX". Pada batas kata yang sungguhan kedua run selalu
+    seukuran dan sejajar, jadi perbedaan ukuran/pergeseran vertikal dipakai
+    sebagai penanda pembeda.
+    """
+    if _digeser_vertikal(prev_run) or _digeser_vertikal(curr_run):
+        return False
+    sz_prev = _ukuran_run(prev_run)
+    sz_curr = _ukuran_run(curr_run)
+    if sz_prev is None or sz_curr is None:
+        return True
+    return abs(sz_prev - sz_curr) <= _TOLERANSI_UKURAN_PT
 
 
 def _fix_run_spacing(docx_path: Path) -> int:
@@ -141,8 +269,52 @@ def _fix_run_spacing(docx_path: Path) -> int:
             # Jangan sisipkan sebelum tanda baca penutup / sesudah pembuka.
             if curr[0] in _NO_SPASI_SEBELUM or prev[-1] in _NO_SPASI_SESUDAH:
                 continue
+            # Jangan sisipkan di tengah kata yang dipecah per-glyph.
+            if not _batas_kata_sungguhan(runs[j - 1], runs[j]):
+                continue
             runs[j].text = " " + curr
             changed += 1
+    if changed:
+        document.save(str(docx_path))
+    return changed
+
+
+def _strip_char_scaling(docx_path: Path) -> int:
+    """Buang ``w:rPr/w:w`` (skala lebar karakter) dari seluruh run.
+
+    pdf2docx menulis nilai pecahan seperti ``98.93928396290747`` untuk memaksa
+    lebar teks persis sama dengan PDF. Nilai itu di luar spesifikasi —
+    ``ST_TextScale`` ECMA-376 hanya menerima persen bulat — dan renderer editor
+    (SuperDoc) menangani run ber-``w:w`` di jalur cat terpisah: run dipasang
+    ``position: absolute; left: padding-left`` lalu diberi ``scaleX``, sehingga
+    ``w:jc`` center/right diabaikan dan teksnya nempel ke tepi indent. Terukur
+    pada dokumen 64 halaman: 186 run ber-``w:w`` membuat 37 paragraf melenceng,
+    mis. 'LAPORAN TUGAS AKHIR' berakhir di 246.7pt alih-alih 399.9pt dan
+    'BANDUNG' mulai di 115.9pt alih-alih di tengah halaman.
+
+    Harga yang dibayar: teks jadi ~1% lebih lebar dari PDF (≈1.8pt untuk judul
+    selebar 174pt) — jauh lebih murah daripada geser 150pt+.
+    """
+    document = Document(str(docx_path))
+    changed = 0
+
+    def bersihkan(runs) -> None:
+        nonlocal changed
+        for r in runs:
+            rPr = r._r.find(qn("w:rPr"))
+            if rPr is None:
+                continue
+            for w in rPr.findall(qn("w:w")):
+                rPr.remove(w)
+                changed += 1
+
+    for p in document.paragraphs:
+        bersihkan(p.runs)
+    for tbl in document.tables:
+        for row in tbl.rows:
+            for cell in row.cells:
+                for p in cell.paragraphs:
+                    bersihkan(p.runs)
     if changed:
         document.save(str(docx_path))
     return changed
@@ -223,9 +395,10 @@ def post_process_converted_docx(
     docx_path: str | Path,
     source_pdf_path: str | Path | None = None,
 ) -> dict:
-    """Refine akhir DOCX hasil pdf2docx: koreksi bold + spacing dot-leader."""
+    """Refine akhir DOCX hasil pdf2docx: skala karakter, bold, spacing dot-leader."""
     docx_path = Path(docx_path)
-    stats = {"bold_fixed_runs": 0, "dot_leader_fixed": 0}
+    stats = {"char_scaling_stripped": 0, "bold_fixed_runs": 0, "dot_leader_fixed": 0}
+    stats["char_scaling_stripped"] = _strip_char_scaling(docx_path)
     if source_pdf_path is not None:
         stats["bold_fixed_runs"] = _fix_bold_from_pdf(docx_path, Path(source_pdf_path))
     stats["dot_leader_fixed"] = _fix_dot_leader_spacing(docx_path)

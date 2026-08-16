@@ -25,3 +25,6 @@ nul
 # Basis data lokal (file sampingan SQLite)
 *.db-shm
 *.db-wal
+
+# Keluaran audit FE-BE (audit_fe_be.py)
+_audit_result.json

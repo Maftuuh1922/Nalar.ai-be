@@ -31,6 +31,11 @@ _KOLOM_TAMBAHAN: list[tuple[str, str, str]] = [
     ("co_writer_documents", "content_format", "VARCHAR(16) NOT NULL DEFAULT 'markdown'"),
     # Lapis 1 (PRD v2.8 §2): AST dokumen (JSON) — preview dirender dari sini.
     ("co_writer_documents", "structured_content", "TEXT"),
+    # Folder tempat draf dikelompokkan; NULL = akar. Tipenya CHAR(32) karena
+    # itulah bentuk `Uuid(as_uuid=True)` di SQLite. Tanpa klausa REFERENCES:
+    # SQLite tidak bisa menambah foreign key lewat ALTER TABLE, dan penegakan
+    # FK memang tidak diaktifkan (lihat app/db/session.py).
+    ("co_writer_documents", "folder_id", "CHAR(32)"),
 ]
 
 

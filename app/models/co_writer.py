@@ -17,6 +17,11 @@ class CoWriterDocument(Base):
         Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False, index=True,
     )
+    # Folder tempat draf disimpan; NULL = belum dikelompokkan (akar).
+    folder_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("co_writer_folders.id"),
+        nullable=True, index=True,
+    )
     title: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     content: Mapped[str] = mapped_column(Text, nullable=False, default="")
     # Lapis 1 (PRD v2.8 §2): AST dokumen (JSON). Sumber kebenaran struktur —

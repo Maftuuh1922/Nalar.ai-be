@@ -202,9 +202,11 @@ def test_heading_dan_baris_tengah_halaman_muka_dibungkus_blok_tengah(tmp_path):
     finally:
         doc.close()
 
-    # Heading muka dibungkus blok tengah, bukan subsection rata kiri.
-    assert "<center>\n## LEMBAR PENGESAHAN DOSEN PEMBIMBING\n</center>" in hasil
-    assert "<center>\n## LEMBAR PENGESAHAN DOSEN PENGUJI\n</center>" in hasil
+    # Heading muka dibungkus blok tengah, bukan subsection rata kiri. Bagian
+    # muka ("LEMBAR PENGESAHAN ...") dinilai H1 oleh `_tingkat_heading` (cocok
+    # `_FRONT`) — berdiri sebagai bagian utama, sejajar "BAB 1" di daftar isi.
+    assert "<center>\n# LEMBAR PENGESAHAN DOSEN PEMBIMBING\n</center>" in hasil
+    assert "<center>\n# LEMBAR PENGESAHAN DOSEN PENGUJI\n</center>" in hasil
     # Baris tanda tangan di tengah juga dibungkus blok tengah.
     assert "<center>\nDi Bandung, 2026\n</center>" in hasil
     # Paragraf biasa tetap polos (bukan di tengah).

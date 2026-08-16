@@ -12,7 +12,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
-import io
 import json
 import logging
 import os
@@ -29,7 +28,7 @@ import httpx
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse, StreamingResponse
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,6 +36,7 @@ from app.api.deps import get_current_user, get_db
 from app.core.config import settings
 from app.models.co_writer import CoWriterDocument
 from app.models.co_writer_file import CoWriterFile, JalurTidakSah, bersihkan_jalur
+from app.models.co_writer_folder import CoWriterFolder
 from app.models.user import User
 from app.schemas.co_writer import (
     AgenticWriteRequest,
@@ -48,7 +48,12 @@ from app.schemas.co_writer import (
     CoWriterDocumentOut,
     CoWriterEditRequest,
     CoWriterEditResponse,
+    CoWriterFolderCreate,
+    CoWriterFolderListOut,
+    CoWriterFolderResponse,
+    CoWriterFolderUpdate,
     CoWriterListOut,
+    CoWriterMoveRequest,
     CoWriterStreamEditRequest,
     CoWriterSummaryOut,
     CoWriterUpdate,
@@ -56,6 +61,7 @@ from app.schemas.co_writer import (
     LearningSpaceData,
 )
 from app.services.agentic_writer import agentic_write
+from app.services.agent_run import run_agent_stream
 from app.services.academic_reference_search import search_academic_references
 from app.services.latex_export import (
     compile_latex_pdf,
@@ -169,6 +175,37 @@ def _onlyoffice_pdf_path(doc_id: uuid.UUID) -> Path:
     return _document_upload_dir(doc_id) / "onlyoffice" / "document.pdf"
 
 
+def _pipeline_sidecar_path(doc_id: uuid.UUID) -> Path:
+    return _document_upload_dir(doc_id) / "onlyoffice" / "pipeline.json"
+
+
+def _baca_sidecar_pipeline(doc_id: uuid.UUID) -> dict:
+    """Baca sidecar pipeline; {} bila belum ada / rusak.
+
+    Sidecar mencatat versi pipeline impor yang membangun DOCX kerja dan apakah
+    pengguna sudah pernah menyuntingnya (`user_edited`). Dipakai auto-heal di
+    `_prepare_onlyoffice_docx` untuk memutuskan bangun-ulang tanpa menghapus
+    hasil kerja pengguna.
+    """
+    path = _pipeline_sidecar_path(doc_id)
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _tulis_sidecar_pipeline(doc_id: uuid.UUID, *, user_edited: bool) -> None:
+    """Tulis sidecar pipeline dengan versi impor sekarang."""
+    from app.services.docx_postprocess import _PIPELINE_IMPOR_VERSI
+
+    path = _pipeline_sidecar_path(doc_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"pipeline": _PIPELINE_IMPOR_VERSI, "user_edited": bool(user_edited)}),
+        encoding="utf-8",
+    )
+
+
 def _derive_title(content: str) -> str:
     """Judul draf diturunkan dari heading pertama (LaTeX atau Markdown lama)."""
     baris = (content or "").splitlines()
@@ -191,7 +228,51 @@ def _derive_title(content: str) -> str:
 
 
 def _preview(content: str) -> str:
-    text = re.sub(r"[#>*`_~\-\[\]()]+", "", content or "")
+    """Cuplikan isi draf sebagai teks biasa.
+
+    Draf Co-Writer berisi LaTeX, jadi membuang simbol Markdown saja tidak cukup:
+    preamble mendahului naskah, sehingga cuplikannya jadi
+    "\\documentclass[12pt,a4paper]{article} \\usepackage..." pada tiap kartu.
+    Perintah struktural dibuang seluruhnya, sedangkan perintah biasa
+    dipertahankan argumen tekstualnya (``\\section{Hasil}`` → "Hasil").
+    """
+    text = content or ""
+    # BOM / zero-width dari berkas impor: tak terlihat tapi ikut terhitung ke
+    # batas 160 karakter dan merusak encoding di sebagian terminal.
+    text = text.replace("﻿", "").replace("​", "")
+    # Sebagian draf hasil impor lama ter-escape ganda: `\clearpage` tersimpan
+    # sebagai `\textbackslash{}clearpage`. Dipulihkan jadi backslash biasa lebih
+    # dulu supaya perintahnya dikenali dan dibuang di langkah berikutnya.
+    text = re.sub(r"\\textbackslash\s*(?:\\?\{\\?\})?", lambda _: "\\", text)
+    # Komentar LaTeX (% sampai akhir baris) bukan naskah. Template kampus
+    # membuka dengan blok komentar soal margin, jadi tanpa langkah ini itulah
+    # yang muncul di kartu. `\%` yang di-escape adalah persen literal — dijaga.
+    text = re.sub(r"(?<!\\)%[^\n]*", " ", text)
+    # Sebagian draf hasil impor lama kehilangan kurung kurawalnya, sehingga
+    # tersimpan sebagai `\vspace0.3cm` alih-alih `\vspace{0.3cm}`. Ukurannya
+    # ikut dibuang di sini; kalau tidak, cuplikannya diawali "0.3cm".
+    text = re.sub(
+        r"\\(?:vspace|hspace|vskip|hskip)\*?\s*-?[\d.]+\s*(?:cm|mm|in|pt|em|ex|bp|pc)\b",
+        " ",
+        text,
+    )
+    # Preamble & perintah yang argumennya bukan naskah — buang beserta argumennya.
+    text = re.sub(
+        r"\\(?:documentclass|usepackage|geometry|setlength|newcommand|renewcommand"
+        r"|bibliographystyle|bibliography|graphicspath|includegraphics"
+        r"|label|ref|cite\w*|input|include"
+        r"|hypersetup|definecolor|pagestyle|title|author|date"
+        # Perintah tata letak: argumennya ukuran (\vspace{0.3cm}), bukan teks.
+        r"|vspace|hspace|vskip|hskip|rule|addcontentsline|columnwidth|textwidth)"
+        r"\*?\s*(?:\[[^\]]*\])?\s*(?:\{[^{}]*\})*",
+        " ",
+        text,
+    )
+    text = re.sub(r"\\(?:begin|end)\s*\{[^{}]*\}(?:\[[^\]]*\])?", " ", text)
+    # Sisanya: pertahankan isi kurung kurawal — \textbf{penting} → "penting".
+    text = re.sub(r"\\[a-zA-Z]+\*?\s*(?:\[[^\]]*\])?\s*\{([^{}]*)\}", r"\1", text)
+    text = re.sub(r"\\[a-zA-Z]+\*?", " ", text)  # perintah tanpa argumen
+    text = re.sub(r"[#>*`_~\[\](){}\\]+", " ", text)  # sisa markup Markdown/LaTeX
     text = re.sub(r"\s+", " ", text).strip()
     return text[:160] or "Empty draft"
 
@@ -452,6 +533,7 @@ def _summary(doc: CoWriterDocument) -> CoWriterSummaryOut:
         created_at=_epoch(doc.created_at),
         updated_at=_epoch(doc.updated_at),
         preview=_preview(doc.content),
+        folder_id=doc.folder_id,
     )
 
 
@@ -679,21 +761,280 @@ async def _file_pdf_dari_markdown(
 
 
 # --------------------------------------------------------------------------- #
+# Folder (pengelompokan draf, boleh bersarang)
+# --------------------------------------------------------------------------- #
+
+# Kedalaman maksimum pohon folder. Dua alasan: pohon yang lebih dalam tidak lagi
+# terbaca di sidebar selebar 200px, dan setiap penelusuran leluhur/keturunan jadi
+# terbatas — tidak ada rekursi tak berujung meski data sempat melingkar.
+MAX_FOLDER_DEPTH = 5
+
+
+async def _folder_map(db: AsyncSession, user_id) -> dict[uuid.UUID, CoWriterFolder]:
+    """Semua folder milik user sebagai {id: folder}.
+
+    Pohon folder seorang user berukuran puluhan baris, jadi dimuat sekali lalu
+    ditelusuri di memori. Itu menghindari kueri rekursif (SQLite lama tidak punya
+    CTE) dan satu kueri per tingkat saat memeriksa leluhur.
+    """
+    rows = await db.scalars(select(CoWriterFolder).where(CoWriterFolder.user_id == user_id))
+    return {f.id: f for f in rows.all()}
+
+
+def _ancestor_ids(folders: dict[uuid.UUID, CoWriterFolder], folder_id: uuid.UUID) -> list[uuid.UUID]:
+    """Rantai id dari `folder_id` sendiri naik sampai folder akar."""
+    chain: list[uuid.UUID] = []
+    seen: set[uuid.UUID] = set()
+    current: uuid.UUID | None = folder_id
+    while current is not None and current in folders and current not in seen:
+        seen.add(current)
+        chain.append(current)
+        current = folders[current].parent_id
+    return chain
+
+
+def _descendant_ids(folders: dict[uuid.UUID, CoWriterFolder], folder_id: uuid.UUID) -> set[uuid.UUID]:
+    """`folder_id` beserta seluruh keturunannya."""
+    hasil = {folder_id}
+    lapis = {folder_id}
+    while lapis:
+        lapis = {f.id for f in folders.values() if f.parent_id in lapis and f.id not in hasil}
+        hasil |= lapis
+    return hasil
+
+
+def _subtree_height(folders: dict[uuid.UUID, CoWriterFolder], folder_id: uuid.UUID) -> int:
+    """Jumlah tingkat pada subpohon `folder_id` (folder tanpa anak = 1)."""
+    anak = [f.id for f in folders.values() if f.parent_id == folder_id]
+    if not anak:
+        return 1
+    return 1 + max(_subtree_height(folders, a) for a in anak)
+
+
+async def _get_owned_folder(db: AsyncSession, folder_id: uuid.UUID, user: User) -> CoWriterFolder:
+    folder = await db.scalar(
+        select(CoWriterFolder).where(
+            CoWriterFolder.id == folder_id,
+            CoWriterFolder.user_id == user.id,
+        )
+    )
+    if folder is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Folder tidak ditemukan.")
+    return folder
+
+
+async def _direct_counts(db: AsyncSession, user_id) -> dict[uuid.UUID, int]:
+    """Jumlah draf per folder, hanya yang langsung berada di folder itu."""
+    rows = await db.execute(
+        select(CoWriterDocument.folder_id, func.count())
+        .where(
+            CoWriterDocument.user_id == user_id,
+            CoWriterDocument.folder_id.is_not(None),
+        )
+        .group_by(CoWriterDocument.folder_id)
+    )
+    return {fid: jumlah for fid, jumlah in rows.all() if fid is not None}
+
+
+def _folder_response(
+    folder: CoWriterFolder,
+    folders: dict[uuid.UUID, CoWriterFolder],
+    langsung: dict[uuid.UUID, int],
+) -> CoWriterFolderResponse:
+    """Satu folder untuk respons, dengan hitungan yang mencakup subfolder.
+
+    Hitungannya inklusif supaya angka di sidebar cocok dengan jumlah kartu yang
+    muncul saat folder itu dipilih — memilih folder induk juga menampilkan isi
+    subfoldernya.
+    """
+    return CoWriterFolderResponse(
+        id=folder.id,
+        name=folder.name,
+        parent_id=folder.parent_id,
+        color=folder.color,
+        document_count=sum(langsung.get(fid, 0) for fid in _descendant_ids(folders, folder.id)),
+        created_at=_epoch(folder.created_at),
+    )
+
+
+@router.get("/folders", response_model=CoWriterFolderListOut)
+async def list_folders(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> CoWriterFolderListOut:
+    """Semua folder milik user beserta jumlah draf (termasuk isi subfolder)."""
+    folders = await _folder_map(db, current_user.id)
+    langsung = await _direct_counts(db, current_user.id)
+    urut = sorted(folders.values(), key=lambda f: (f.name.lower(), f.created_at))
+    return CoWriterFolderListOut(
+        folders=[_folder_response(f, folders, langsung) for f in urut]
+    )
+
+
+@router.post("/folders", response_model=CoWriterFolderResponse, status_code=status.HTTP_201_CREATED)
+async def create_folder(
+    payload: CoWriterFolderCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> CoWriterFolderResponse:
+    """Buat folder baru, opsional di dalam folder lain."""
+    folders = await _folder_map(db, current_user.id)
+    if payload.parent_id is not None:
+        if payload.parent_id not in folders:
+            raise HTTPException(status_code=404, detail="Folder induk tidak ditemukan.")
+        if len(_ancestor_ids(folders, payload.parent_id)) >= MAX_FOLDER_DEPTH:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Folder maksimal {MAX_FOLDER_DEPTH} tingkat.",
+            )
+
+    folder = CoWriterFolder(
+        user_id=current_user.id,
+        parent_id=payload.parent_id,
+        name=payload.name.strip(),
+        color=(payload.color or "").strip() or None,
+    )
+    db.add(folder)
+    await db.commit()
+    await db.refresh(folder)
+    folders[folder.id] = folder
+    return _folder_response(folder, folders, {})
+
+
+@router.put("/folders/{folder_id}", response_model=CoWriterFolderResponse)
+async def update_folder(
+    folder_id: uuid.UUID,
+    payload: CoWriterFolderUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> CoWriterFolderResponse:
+    """Ganti nama/warna folder, atau pindahkan ke induk lain."""
+    folder = await _get_owned_folder(db, folder_id, current_user)
+    folders = await _folder_map(db, current_user.id)
+
+    if payload.name is not None and payload.name.strip():
+        folder.name = payload.name.strip()
+    if payload.color is not None:
+        folder.color = payload.color.strip() or None
+
+    # "parent_id": null berarti pindah ke akar, jadi dibedakan dari field yang
+    # tidak dikirim sama sekali.
+    if "parent_id" in payload.model_fields_set:
+        induk_baru = payload.parent_id
+        if induk_baru is not None:
+            if induk_baru not in folders:
+                raise HTTPException(status_code=404, detail="Folder induk tidak ditemukan.")
+            # Memindahkan folder ke dalam keturunannya sendiri memutus subpohon
+            # itu dari akar: ia tidak akan pernah muncul lagi di sidebar dan
+            # tidak bisa dipindahkan kembali.
+            if induk_baru in _descendant_ids(folders, folder.id):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Folder tidak bisa dipindahkan ke dalam dirinya sendiri.",
+                )
+            kedalaman = len(_ancestor_ids(folders, induk_baru)) + _subtree_height(folders, folder.id)
+            if kedalaman > MAX_FOLDER_DEPTH:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Folder maksimal {MAX_FOLDER_DEPTH} tingkat.",
+                )
+        folder.parent_id = induk_baru
+
+    await db.commit()
+    await db.refresh(folder)
+    folders[folder.id] = folder
+    return _folder_response(folder, folders, await _direct_counts(db, current_user.id))
+
+
+@router.delete("/folders/{folder_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_folder(
+    folder_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Hapus satu folder; isinya dinaikkan ke induk folder tersebut.
+
+    Isi folder sengaja TIDAK ikut terhapus — menghapus wadah tidak boleh
+    menghapus draf. Pemindahan anak dilakukan eksplisit di sini karena basis
+    data berjalan tanpa penegakan foreign key (lihat app/db/session.py): tanpa
+    langkah ini subfolder dan dokumen akan menunjuk id mati dan lenyap dari UI.
+    """
+    folder = await _get_owned_folder(db, folder_id, current_user)
+    induk = folder.parent_id
+
+    await db.execute(
+        update(CoWriterFolder)
+        .where(
+            CoWriterFolder.parent_id == folder.id,
+            CoWriterFolder.user_id == current_user.id,
+        )
+        .values(parent_id=induk)
+    )
+    await db.execute(
+        update(CoWriterDocument)
+        .where(
+            CoWriterDocument.folder_id == folder.id,
+            CoWriterDocument.user_id == current_user.id,
+        )
+        .values(folder_id=induk)
+    )
+    await db.delete(folder)
+    await db.commit()
+
+
+@router.put("/documents/{doc_id}/folder", response_model=CoWriterSummaryOut)
+async def move_document_to_folder(
+    doc_id: uuid.UUID,
+    payload: CoWriterMoveRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> CoWriterSummaryOut:
+    """Pindahkan draf ke folder lain; ``folder_id: null`` mengeluarkannya ke akar."""
+    doc = await _get_owned_doc(db, doc_id, current_user)
+    if payload.folder_id is not None:
+        await _get_owned_folder(db, payload.folder_id, current_user)
+    doc.folder_id = payload.folder_id
+    await db.commit()
+    await db.refresh(doc)
+    return _summary(doc)
+
+
+# --------------------------------------------------------------------------- #
 # CRUD dokumen
 # --------------------------------------------------------------------------- #
 
 
 @router.get("/documents", response_model=CoWriterListOut)
 async def list_documents(
+    folder_id: str | None = Query(
+        None,
+        description='Saring per folder: UUID folder (termasuk isi subfoldernya), "root" untuk draf tanpa folder, atau kosong untuk semua',
+    ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> CoWriterListOut:
-    """Daftar draf milik user, terbaru di atas."""
-    result = await db.scalars(
-        select(CoWriterDocument)
-        .where(CoWriterDocument.user_id == current_user.id)
-        .order_by(CoWriterDocument.updated_at.desc())
-    )
+    """Daftar draf milik user, terbaru di atas.
+
+    Tanpa ``folder_id`` seluruh draf dikembalikan seperti sebelumnya, jadi
+    pemanggil yang sudah ada tidak berubah perilakunya.
+    """
+    query = select(CoWriterDocument).where(CoWriterDocument.user_id == current_user.id)
+
+    if folder_id == "root":
+        query = query.where(CoWriterDocument.folder_id.is_(None))
+    elif folder_id:
+        try:
+            target = uuid.UUID(folder_id)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="folder_id harus UUID atau \"root\".")
+        folders = await _folder_map(db, current_user.id)
+        if target not in folders:
+            raise HTTPException(status_code=404, detail="Folder tidak ditemukan.")
+        # Memilih folder induk juga menampilkan isi subfoldernya; kalau tidak,
+        # draf yang tersimpan lebih dalam akan tampak hilang.
+        query = query.where(CoWriterDocument.folder_id.in_(_descendant_ids(folders, target)))
+
+    result = await db.scalars(query.order_by(CoWriterDocument.updated_at.desc()))
     return CoWriterListOut(documents=[_summary(doc) for doc in result.all()])
 
 
@@ -705,8 +1046,11 @@ async def create_document(
 ) -> CoWriterDocumentOut:
     """Buat draf baru; judul diturunkan dari isi bila tidak diberikan."""
     title = (payload.title or "").strip() or _derive_title(payload.content or "")
+    if payload.folder_id is not None:
+        await _get_owned_folder(db, payload.folder_id, current_user)
     doc = CoWriterDocument(
         user_id=current_user.id,
+        folder_id=payload.folder_id,
         title=title,
         content=payload.content or "",
     )
@@ -723,15 +1067,24 @@ async def get_document(
     db: AsyncSession = Depends(get_db),
 ) -> CoWriterDocumentOut:
     doc = await _get_owned_doc(db, doc_id, current_user)
-    # Editor bekerja pada kode LaTeX. Draf yang dibuat sebelum perubahan itu
-    # berisi Markdown, jadi dikonversi sekali saat pertama dibuka; checkpoint
-    # dibuat lebih dulu supaya isi aslinya bisa dipulihkan bila hasil konversi
-    # perlu diperbaiki manual.
-    if doc.content_format != "latex":
+    # Markdown-first: editor bekerja pada Markdown. Draf lama yang tersimpan
+    # sebagai LaTeX dikonversi SEKALI saat pertama dibuka; checkpoint dibuat
+    # lebih dulu supaya isi LaTeX aslinya bisa dipulihkan bila konversi perlu
+    # diperbaiki manual. AST dipakai bila ada (lebih rapi daripada mengurai
+    # LaTeX), else jatuh ke latex_to_markdown.
+    if doc.content_format != "markdown":
         if (doc.content or "").strip():
-            await simpan_checkpoint(db, doc, current_user, "Sebelum konversi ke LaTeX")
-            doc.content = markdown_to_latex(doc.content)
-        doc.content_format = "latex"
+            await simpan_checkpoint(db, doc, current_user, "Sebelum konversi ke Markdown")
+            markdown = ""
+            if doc.structured_content:
+                try:
+                    from app.services.doc_ast import DocumentAst, ast_to_markdown
+
+                    markdown = ast_to_markdown(DocumentAst.from_json(doc.structured_content))
+                except Exception:  # noqa: BLE001 â€” AST rusak â†’ konversi LaTeX
+                    markdown = ""
+            doc.content = markdown or latex_to_markdown(doc.content)
+        doc.content_format = "markdown"
         await db.commit()
         await db.refresh(doc)
     return _detail(doc)
@@ -772,16 +1125,90 @@ async def get_working_docx(
     )
 
 
+@router.put("/documents/{doc_id}/working-docx")
+async def save_working_docx(
+    doc_id: uuid.UUID,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Simpan DOCX kerja dari editor SuperDoc (autosave mode Word).
+
+    Inilah SATU-SATUNYA sumber kebenaran mode Word: apa yang tampil di editor =
+    apa yang tersimpan di sini = apa yang terunduh saat ekspor. Kolom `doc.sfdt`
+    (era Syncfusion) berhenti dipakai — dulu ia menyimpan cap waktu, bukan
+    dokumen, sehingga tiap suntingan hilang saat refresh. `doc.content` (buffer
+    LaTeX mode Sumber) TIDAK disentuh.
+    """
+    doc = await _get_owned_doc(db, doc_id, current_user)
+    contents = await file.read()
+    # Tolak berkas kosong / non-DOCX (DOCX = arsip ZIP, magic "PK"). Ini
+    # pertahanan langsung terhadap kelas bug "blob kosong menimpa dokumen":
+    # bila editor belum siap dan mengekspor blob kosong, jangan sampai ia
+    # menghapus dokumen pengguna.
+    if len(contents) < 4 or contents[:2] != b"PK":
+        raise HTTPException(
+            status_code=422,
+            detail="Berkas bukan DOCX yang sah (kosong atau bukan arsip ZIP).",
+        )
+
+    target = _onlyoffice_docx_path(doc_id)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    # Tulis atomik: ke .tmp lalu os.replace. Autosave yang terputus di tengah
+    # tidak boleh meninggalkan DOCX rusak yang gagal dimuat editor.
+    tmp = target.with_suffix(".docx.tmp")
+    from starlette.concurrency import run_in_threadpool
+
+    def _tulis_atomik() -> None:
+        tmp.write_bytes(contents)
+        os.replace(tmp, target)
+
+    try:
+        await run_in_threadpool(_tulis_atomik)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+    # Sidecar: tandai pengguna sudah menyunting → auto-heal tidak akan menimpa.
+    _tulis_sidecar_pipeline(doc_id, user_edited=True)
+
+    doc.updated_at = datetime.utcnow()
+    doc.sfdt = ""
+    await db.commit()
+    return {"ok": True, "bytes": len(contents)}
+
+
 async def _prepare_onlyoffice_docx(doc: CoWriterDocument) -> Path:
     """Siapkan DOCX kerja. DOCX asli diprioritaskan agar layout tetap utuh."""
     from starlette.concurrency import run_in_threadpool
+    from app.services.docx_postprocess import _PIPELINE_IMPOR_VERSI
 
     target = _onlyoffice_docx_path(doc.id)
     target.parent.mkdir(parents=True, exist_ok=True)
+    source = _source_file(doc.id)
+
+    # Auto-heal: dokumen impor-PDF yang dibangun dengan pipeline lama dibangun
+    # ulang otomatis — TAPI hanya bila pengguna belum menyuntingnya (sidecar
+    # `user_edited`). Setelah mode Word menyimpan, DOCX kerja memuat hasil kerja
+    # pengguna, jadi bangun-ulang tanpa syarat ini akan menghapusnya. Sidecar
+    # hilang dihitung versi 0 (dokumen lama sebelum fitur ini) → dibangun ulang
+    # sekali, lalu sidecar ditulis supaya tidak berulang.
+    if source and source[0].suffix.lower() == ".pdf":
+        sidecar = _baca_sidecar_pipeline(doc.id)
+        if sidecar.get("user_edited") is not True and int(
+            sidecar.get("pipeline") or 0
+        ) < _PIPELINE_IMPOR_VERSI:
+            target.unlink(missing_ok=True)
+
     if not (target.is_file() and target.stat().st_size > 0):
-        source = _source_file(doc.id)
         if source and source[0].suffix.lower() == ".docx":
             await run_in_threadpool(shutil.copyfile, source[0], target)
+        elif source and source[0].suffix.lower() == ".pdf":
+            # Sumber PDF WAJIB dikonversi ulang lewat pipeline impor. Tanpa
+            # cabang ini alurnya jatuh ke markdown di bawah, dan seluruh layout
+            # hasil ekstraksi (posisi baris, tabel, gambar) hilang tanpa jejak.
+            await _rebuild_docx_dari_pdf(doc.id, source[0], target)
+            # Sidecar: DOCX kerja baru dari pipeline sekarang, belum disunting.
+            _tulis_sidecar_pipeline(doc.id, user_edited=False)
         elif doc.sfdt and doc.sfdt.lstrip().startswith("<"):
             from app.services.html_docx_exporter import html_to_docx
 
@@ -800,10 +1227,87 @@ async def _prepare_onlyoffice_docx(doc: CoWriterDocument) -> Path:
             from app.services.docx_template_exporter import markdown_to_docx_template
 
             await run_in_threadpool(markdown_to_docx_template, markdown, str(target), None)
-    # Hapus auto-numbering dari style heading (numPr → 0) supaya teks "1.1 …"
-    # tidak dirender OnlyOffice dengan nomor ganda ("1.1 1.1 …").
-    await run_in_threadpool(_strip_heading_numbering, target)
+        # Hapus auto-numbering dari style heading (numPr → 0) supaya teks "1.1 …"
+        # tidak dirender dengan nomor ganda ("1.1 1.1 …"). HANYA untuk berkas
+        # yang baru dibangun: menjalankannya tiap GET akan menulis ulang berkas
+        # hasil suntingan pengguna dan menggeser mtime-nya tiap kali.
+        await run_in_threadpool(_strip_heading_numbering, target)
     return target
+
+
+async def _rebuild_docx_dari_pdf(doc_id: uuid.UUID, pdf_path: Path, target: Path):
+    """Konversi PDF sumber → DOCX kerja lewat pipeline impor yang sama.
+
+    Urutannya harus identik dengan cabang `.pdf` di `import_file`: konversi,
+    lalu `postprocess_docx` (heading + cover), lalu `post_process_converted_docx`
+    (koreksi bold dari font-flags PDF + spacing dot-leader). Melewatkan salah
+    satu menghasilkan DOCX yang berbeda dari hasil impor pertama.
+
+    Return `ConversionResult` supaya pemanggil bisa melaporkan metode & durasi.
+    """
+    from starlette.concurrency import run_in_threadpool
+
+    from app.services.docx_postprocess import post_process_converted_docx, postprocess_docx
+    from app.services.pdf_docx_import import convert_pdf_to_docx
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    ok, res = await run_in_threadpool(convert_pdf_to_docx, pdf_path, target)
+    if not ok:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Gagal mengonversi PDF ke DOCX. Detail teknis: {res.error}",
+        )
+    await run_in_threadpool(postprocess_docx, target)
+    await run_in_threadpool(post_process_converted_docx, target, pdf_path)
+    log_import_pdf_conversion(doc_id, res)
+    return res
+
+
+@router.post("/documents/{doc_id}/rebuild-working-docx")
+async def rebuild_working_docx(
+    doc_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bangun ulang DOCX kerja dari PDF asli yang tersimpan.
+
+    Dipakai untuk dokumen yang diimpor sebelum perbaikan pipeline: hasil
+    konversinya sudah tersimpan rusak dan tidak akan berubah sendiri karena
+    DOCX kerja hanya dibuat sekali.
+
+    `doc.sfdt` dikosongkan supaya editor benar-benar memuat DOCX yang baru —
+    frontend memprioritaskan `sfdt` bila ada. Suntingan mode Word karena itu
+    hilang, jadi pemanggilnya harus mengonfirmasi lebih dulu. `doc.content`
+    (buffer LaTeX) TIDAK disentuh: di situ ada hasil kerja pengguna, dan
+    melewatinya juga menghindari langkah pandoc yang lambat.
+    """
+    doc = await _get_owned_doc(db, doc_id, current_user)
+    source = _source_file(doc_id)
+    if source is None or source[0].suffix.lower() != ".pdf":
+        raise HTTPException(
+            status_code=400,
+            detail="Bangun ulang hanya tersedia untuk dokumen yang diimpor dari PDF.",
+        )
+
+    target = _onlyoffice_docx_path(doc_id)
+    target.unlink(missing_ok=True)
+    try:
+        res = await _rebuild_docx_dari_pdf(doc_id, source[0], target)
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"Gagal membangun ulang: {exc}")
+
+    # Sidecar ditimpa: pipeline sekarang, dan status suntingan direset ke false
+    # (bangun-ulang eksplisit membuang DOCX kerja lama beserta suntingannya).
+    _tulis_sidecar_pipeline(doc_id, user_edited=False)
+    doc.sfdt = ""
+    await db.commit()
+    return {
+        "ok": True,
+        "method": getattr(res, "method", None),
+        "duration_sec": getattr(res, "duration_sec", None),
+    }
 
 
 def _strip_heading_numbering(path: Path) -> int:
@@ -940,6 +1444,10 @@ async def onlyoffice_callback(
         target = _onlyoffice_pdf_path(doc_id) if is_pdf else _onlyoffice_docx_path(doc_id)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(contents)
+        if not is_pdf:
+            # ONLYOFFICE menyimpan hasil suntingan pengguna → tandai supaya
+            # auto-heal tidak menimpanya dengan hasil bangun-ulang dari PDF.
+            _tulis_sidecar_pipeline(doc_id, user_edited=True)
         doc = await db.scalar(select(CoWriterDocument).where(CoWriterDocument.id == doc_id))
         if doc is not None and not is_pdf:
             from starlette.concurrency import run_in_threadpool
@@ -952,68 +1460,44 @@ async def onlyoffice_callback(
     return {"error": 0}
 
 
-@router.post("/documents/{doc_id}/onlyoffice-export-pdf")
-async def export_onlyoffice_pdf(
+@router.post("/documents/{doc_id}/export-pdf")
+async def export_pdf(
     doc_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Ekspor PDF langsung dari DOCX kerja melalui ConvertService ONLYOFFICE."""
-    doc = await _get_owned_doc(db, doc_id, current_user)
-    source = _source_file(doc_id)
-    if source and source[0].suffix.lower() == ".pdf":
-        path = _onlyoffice_pdf_path(doc_id)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if not path.is_file() or path.stat().st_size == 0:
-            shutil.copyfile(source[0], path)
-        return FileResponse(
-            path,
-            media_type="application/pdf",
-            filename=f"{doc.title or 'dokumen'}.pdf",
-        )
-    path = await _prepare_onlyoffice_docx(doc)
-    token = _onlyoffice_token(doc_id)
-    version = int(path.stat().st_mtime_ns)
-    import hashlib
+    """Ekspor PDF mode Word — cetak DOCX kerja apa adanya lewat LibreOffice.
 
-    key = hashlib.sha256(f"{doc_id}-{version}".encode()).hexdigest()[:40]
-    public_backend = "http://host.docker.internal:8089"
-    source_url = (
-        f"{public_backend}{settings.API_PREFIX}/co_writer/onlyoffice/file/"
-        f"{doc_id}?token={token}"
-    )
-    async with httpx.AsyncClient(timeout=180) as client:
-        # Minta editor menyimpan perubahan aktif sebelum konversi.
-        try:
-            await client.post(
-                "http://localhost:8090/coauthoring/CommandService.ashx",
-                json={"c": "forcesave", "key": key},
-            )
-            await asyncio.sleep(2)
-        except Exception:  # noqa: BLE001 — konversi masih bisa memakai save terakhir
-            pass
-        response = await client.post(
-            "http://localhost:8090/ConvertService.ashx",
-            json={
-                "async": False,
-                "filetype": "docx",
-                "key": f"pdf-{doc_id}-{path.stat().st_mtime_ns}",
-                "outputtype": "pdf",
-                "title": f"{doc.title or 'Dokumen'}.docx",
-                "url": source_url,
-            },
+    "Persis seperti di layar": editor menyunting DOCX kerja, jadi PDF-nya
+    dicetak dari DOCX kerja yang sama. TIDAK ada pintasan menyalin
+    `source/original.pdf` (itu membuang seluruh suntingan pengguna), TIDAK ada
+    ONLYOFFICE (servisnya mati), dan TIDAK ada fallback Chromium (margin-nya
+    dipaku ke template kampus — hasilnya bukan "seperti di layar").
+    """
+    from starlette.concurrency import run_in_threadpool
+    from app.services.docx_pdf_export import docx_to_pdf, tersedia
+
+    doc = await _get_owned_doc(db, doc_id, current_user)
+    if not tersedia():
+        raise HTTPException(
+            status_code=503,
+            detail="Ekspor PDF butuh LibreOffice yang belum terpasang di peladen ini.",
         )
-        response.raise_for_status()
-        result = response.json()
-        if not result.get("endConvert") or not result.get("fileUrl"):
-            raise HTTPException(status_code=502, detail=f"Konversi ONLYOFFICE gagal: {result}")
-        pdf_response = await client.get(str(result["fileUrl"]))
-        pdf_response.raise_for_status()
-    filename = re.sub(r'[^\w .-]+', '_', doc.title or 'dokumen').strip() or 'dokumen'
-    return StreamingResponse(
-        io.BytesIO(pdf_response.content),
+
+    docx_path = await _prepare_onlyoffice_docx(doc)
+    if not docx_path.is_file() or docx_path.stat().st_size == 0:
+        raise HTTPException(status_code=404, detail="DOCX kerja belum tersedia.")
+
+    pdf_path = _onlyoffice_pdf_path(doc_id)
+    ok, pesan = await run_in_threadpool(docx_to_pdf, docx_path, pdf_path)
+    if not ok:
+        raise HTTPException(status_code=502, detail=f"Gagal mencetak PDF: {pesan}")
+
+    filename = re.sub(r"[^\w .-]+", "_", doc.title or "dokumen").strip() or "dokumen"
+    return FileResponse(
+        pdf_path,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}.pdf"'},
+        filename=f"{filename}.pdf",
     )
 
 
@@ -1088,8 +1572,15 @@ async def get_document_markdown(
             "updated_at": _epoch(berkas.updated_at),
         }
     # AST-first: dokumen dengan struktur tersimpan dirender dari AST (struktur
-    # kanonik PRD: judul cover tunggal, heading terpisah). Fallback ke LaTeX
-    # untuk dokumen lama yang belum punya AST.
+    # kanonik PRD: judul cover tunggal, heading terpisah). Markdown-first:
+    # dokumen yang sudah bermformat markdown dikembalikan apa adanya (tanpa
+    # round-trip). Fallback ke konversi LaTeX untuk draf lama.
+    if doc.content_format == "markdown":
+        return {
+            "markdown": doc.content or "",
+            "title": doc.title,
+            "updated_at": _epoch(doc.updated_at),
+        }
     if doc.structured_content:
         try:
             from app.services.doc_ast import DocumentAst, ast_to_markdown
@@ -1117,20 +1608,21 @@ async def save_document_from_markdown(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Simpan hasil edit ala Word: Markdown dikonversi kembali ke LaTeX.
+    """Simpan hasil edit dari editor markdown.
 
     Judul dokumen sengaja TIDAK disentuh â€” mengubah isi tidak boleh mengubah
-    judul TA. Bila `path` diberikan, hasilnya ditulis ke berkas anak (mis.
-    bab/01.tex) dan main.tex tidak tersentuh.
+    judul TA. Bila `path` diberikan, hasilnya ditulis ke berkas anak proyek
+    LaTeX (mis. bab/01.tex) dan main.tex tidak tersentuh; jalur berkas-anak itu
+    adalah fitur proyek multi-berkas LaTeX terpisah dan tetap memakai LaTeX.
     """
     await _get_owned_doc(db, doc_id, current_user)
     isi = (payload or {}).get("markdown")
     if not isinstance(isi, str):
         raise HTTPException(status_code=422, detail="markdown harus berupa teks.")
-    latex = markdown_to_latex(isi, preserve_source=True)
 
     jalur_mentah = (payload or {}).get("path")
     if jalur_mentah not in (None, ""):
+        latex = markdown_to_latex(isi, preserve_source=True)
         try:
             jalur = bersihkan_jalur(str(jalur_mentah))
         except JalurTidakSah as exc:
@@ -1163,11 +1655,12 @@ async def save_document_from_markdown(
             "updated_at": _epoch(berkas.updated_at),
         }
 
+    # Markdown-first: dokumen utama disimpan sebagai Markdown apa adanya.
     doc = await _get_owned_doc(db, doc_id, current_user)
-    doc.content = latex
-    doc.content_format = "latex"
+    doc.content = isi
+    doc.content_format = "markdown"
     # AST lama tidak lagi selaras dengan isi baru â€” invalidasi supaya GET /md
-    # (yang AST-first) langsung merefleksikan hasil edit ala Word.
+    # (yang AST-first untuk doc lama) langsung merefleksikan hasil edit.
     doc.structured_content = None
     await db.commit()
     await db.refresh(doc)
@@ -1886,6 +2379,104 @@ async def agentic_write_stream_endpoint(
     )
 
 
+@router.post("/documents/{doc_id}/agent-run/stream")
+async def agent_run_stream_endpoint(
+    doc_id: uuid.UUID,
+    payload: dict,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+    """Loop eksekusi agentic (Fase A / vibe-writing) — SSE.
+
+    Body:
+        instruction: str            perintah tunggal pengguna (wajib)
+        mode: "cepat"|"seimbang"|"menyeluruh"  (default "seimbang")
+        doc_context: str            potret dokumen dari editor (opsional; bila
+                                    kosong dipakai sumber proyek di server)
+        selection_text: str         teks yang sedang disorot pengguna (opsional)
+        model: {...}                pilihan model (opsional)
+
+    Event SSE (name → data):
+        plan {tasks:[{index,title,status}]}
+        task_status {index,status,note?}
+        tool_call {id,name,args,fe}   fe=true → frontend eksekusi ke editor
+        tool_result {id,name,ok,summary}
+        text {delta}                  ringkasan akhir yang mengalir
+        reasoning {delta}
+        usage {...}
+        error {detail}
+        end {}
+    """
+    from openai import AsyncOpenAI
+
+    instruction = str(payload.get("instruction", "")).strip()
+    if not instruction:
+        raise HTTPException(status_code=422, detail="Instruksi kosong.")
+    mode = str(payload.get("mode") or "seimbang")
+    selection_text = payload.get("selection_text") or None
+
+    doc = await _get_owned_doc(db, doc_id, current_user)
+    llm = await _resolve_llm(db, current_user.id, payload.get("model"))
+
+    # Konteks dokumen: utamakan potret dari editor (paling mutakhir); bila FE
+    # tak mengirim, jatuh ke sumber proyek di server (tanpa konversi DOCX/rebuild).
+    doc_context = str(payload.get("doc_context") or "")
+    if not doc_context.strip():
+        try:
+            doc_context = await _sumber_tex_proyek(db, doc)
+        except Exception:  # noqa: BLE001
+            doc_context = ""
+
+    # Riset web otonom hanya untuk model ber-tier agentic (hindari loop liar pada
+    # model lemah); tool tulis tetap tersedia di semua tier.
+    allow_web = llm.capability_tier in (
+        "agentic_dasar_terverifikasi",
+        "agentic_penuh_terverifikasi",
+    )
+
+    client = AsyncOpenAI(
+        base_url=llm.base_url,
+        api_key=llm.api_key or "dummy",
+        timeout=CO_WRITER_REQUEST_TIMEOUT_SECONDS,
+    )
+
+    async def event_stream():
+        try:
+            async for line in run_agent_stream(
+                client,
+                llm.model_name,
+                instruction=instruction,
+                doc_context=doc_context,
+                db=db,
+                user_id=current_user.id,
+                mode=mode,
+                allow_web=allow_web,
+                selection_text=selection_text,
+            ):
+                try:
+                    evt = json.loads(line)
+                except Exception:  # noqa: BLE001
+                    continue
+                name = evt.get("event", "message")
+                data = evt.get("data", {})
+                if not isinstance(data, dict):
+                    data = {"value": data}
+                yield _sse(name, data)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("agent-run stream gagal")
+            yield _sse("error", {"detail": str(exc)})
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 # --------------------------------------------------------------------------- #
 # PRD v2.3: regenerate-bibliography, export pdf/docx, generate-diagram, insert-media
 # --------------------------------------------------------------------------- #
@@ -2165,12 +2756,38 @@ async def export_latex(
     import tempfile
 
     doc = await _get_owned_doc(db, doc_id, current_user)
-    # Isi draf sudah berupa kode LaTeX (get_document mengkonversi draf lama),
-    # jadi dipakai apa adanya. Konversi hanya untuk draf yang belum tersentuh.
-    tex_source = await _sumber_tex_proyek(db, doc)
 
     safe_title = _re.sub(r'[\\/:*?"<>|]', "_", doc.title or "Draf").strip()[:80] or "Draf"
     fname = f"{safe_title.replace(' ', '_')}_{uuid.uuid4().hex[:6]}"
+
+    # Markdown-first: dokumen utama menyimpan markdown, dan PDF-nya HARUS sama
+    # dengan panel pratinjau. Jadi PDF dirender lewat jalur typeset (Chromium,
+    # `markdown_to_typeset_html` yang sama dengan pratinjau) alih-alih
+    # mengkompilasi markdown-sebagai-LaTeX lewat tectonic â€” kompilasi itulah
+    # yang dulu membuat "yang diinput beda dengan yang keluar". Unduhan .tex
+    # tetap dilayani (markdown->LaTeX) sebagai target ekspor opsional; draf lama
+    # yang masih LaTeX murni tetap lewat tectonic di bawah.
+    if doc.content_format == "markdown" and format == "pdf":
+        from starlette.concurrency import run_in_threadpool
+
+        from app.services.typeset import typeset_to_pdf
+
+        tmpdir = tempfile.mkdtemp()
+        output_path = os.path.join(tmpdir, f"{fname}.pdf")
+        try:
+            await run_in_threadpool(typeset_to_pdf, doc.content or "", output_path)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Typeset PDF gagal untuk %s: %s", doc.id, exc, exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Gagal membuat PDF: {exc}")
+        return FileResponse(
+            path=output_path,
+            filename=f"{safe_title}.pdf",
+            media_type="application/pdf",
+        )
+
+    # format=tex, atau draf lama yang masih LaTeX murni: butuh sumber .tex utuh.
+    # `\input{}` sudah didatarkan agar naskahnya lengkap, bukan cuma preamble.
+    tex_source = await _sumber_tex_proyek(db, doc)
 
     if format == "tex":
         # Unduh source .tex saja
@@ -2646,32 +3263,25 @@ async def typeset_preview_buffer(
     """Pratinjau Rapi dari isi editor yang BELUM disimpan (PRV03).
 
     Body opsional: {"content": "<markdown>"}. Dipakai panel pratinjau saat
-    mengetik supaya tidak perlu menyimpan tiap ketikan. Render selalu lewat
-    Lapis 1â†’2 (AST â†’ HTML): ringan, dan tidak bisa gagal seperti compile.
+    mengetik supaya tidak perlu menyimpan tiap ketikan.
+
+    Markdown-first: pratinjau memakai renderer YANG SAMA dengan ekspor PDF
+    (`markdown_to_typeset_html` â€” markdown2), jadi yang di layar == yang
+    tercetak. Ringan, dan tidak bisa gagal seperti compile LaTeX.
     """
     await _get_owned_doc(db, doc_id, current_user)
     content = (payload or {}).get("content")
     if content is not None and isinstance(content, str):
-        from app.services.doc_ast import ast_to_html, markdown_to_ast
-        from app.services.doc_import import _rapikan
+        from app.services.typeset import markdown_to_typeset_html
 
-        try:
-            bersih = _rapikan(content, preserve_content=False)
-        except Exception:  # noqa: BLE001 â€” buffer tak biasa â†’ pakai mentah
-            bersih = content
-        ast = markdown_to_ast(bersih)
-        return {"html": ast_to_html(ast), "source": "buffer"}
-    from app.services.doc_ast import DocumentAst, ast_to_html
-
-    doc = await _get_owned_doc(db, doc_id, current_user)
-    if doc.structured_content:
-        try:
-            ast = DocumentAst.from_json(doc.structured_content)
-            return {"html": ast_to_html(ast), "source": "ast"}
-        except Exception:  # noqa: BLE001
-            pass
+        return {"html": markdown_to_typeset_html(content), "source": "buffer"}
     from app.services.typeset import markdown_to_typeset_html
 
+    doc = await _get_owned_doc(db, doc_id, current_user)
+    # Dokumen markdown: render kolom content langsung (== ekspor). Dokumen lama
+    # yang belum dimigrasi (masih LaTeX) dirapikan lewat sumber proyek.
+    if doc.content_format == "markdown":
+        return {"html": markdown_to_typeset_html(doc.content or ""), "source": "doc"}
     return {
         "html": markdown_to_typeset_html(await _sumber_tex_proyek(db, doc)),
         "source": "fallback",
@@ -2853,6 +3463,53 @@ FORMAT OUTPUT (WAJIB JSON valid, array dari 0 atau lebih temuan, tidak ada teks 
     "tool_to_call": "insert_citation | insert_or_edit_section | fix_minor_issue | null"
   }}
 ]"""
+
+
+_REVIEW_HEADING_RE = re.compile(
+    r"^\\(?:chapter|section|subsection|subsubsection)\*?\s*(?:\[[^\]]*\])?\s*\{([^{}]*)\}"
+)
+
+
+def _review_heading_label(ln: str) -> str | None:
+    """Kalau `ln` sebuah heading (LaTeX atau Markdown), kembalikan judulnya.
+
+    Dipakai reviewer untuk melacak bab/section yang sedang berjalan supaya lokasi
+    temuan (chapter + paragraf) dihitung DETERMINISTIK dari struktur dokumen —
+    bukan ditebak LLM, yang cenderung menyalin contoh format (dulu selalu "Bab 1").
+    """
+    m = _REVIEW_HEADING_RE.match(ln)
+    if m:
+        return m.group(1).strip() or None
+    if ln.startswith("#"):
+        return ln.lstrip("#").strip() or None
+    return None
+
+
+def _lokasi_temuan(finding: dict, candidates: list[dict]) -> dict:
+    """Ganti lokasi tebakan LLM dengan lokasi nyata dari kandidat pre-filter.
+
+    Kita hanya percaya `candidate_index` + `anchor_text` dari LLM; chapter &
+    paragraph diambil dari kandidat yang posisinya sudah dilacak saat pre-filter.
+    """
+    idx = finding.get("candidate_index")
+    cand = candidates[idx - 1] if isinstance(idx, int) and 1 <= idx <= len(candidates) else None
+    loc = finding.get("location") if isinstance(finding.get("location"), dict) else {}
+    anchor = str(loc.get("anchor_text") or finding.get("anchor_text") or "").strip()
+    if cand:
+        finding["location"] = {
+            "chapter": cand["chapter"],
+            "paragraph": cand["paragraph"],
+            "anchor_text": anchor or cand["text"][:120],
+        }
+    else:
+        # candidate_index tak valid — pertahankan anchor, jangan mengarang bab.
+        finding["location"] = {
+            "chapter": loc.get("chapter") or "?",
+            "paragraph": loc.get("paragraph"),
+            "anchor_text": anchor,
+        }
+    finding.pop("candidate_index", None)
+    return finding
 
 
 @router.post("/documents/{doc_id}/ai-review")
@@ -3642,27 +4299,26 @@ async def import_file_to_co_writer(
         shutil.rmtree(_document_upload_dir(new_doc.id), ignore_errors=True)
         raise HTTPException(status_code=500, detail=f"Gagal menyimpan berkas sumber: {exc}")
 
-    # Konversi di perbatasan: pengekstrak DOCX/PDF menghasilkan Markdown,
-    # sedangkan draf disimpan sebagai LaTeX murni. Dikonversi sekali di sini
-    # supaya editor dan pratinjau PDF tidak perlu bercabang dua format.
-    # Berkas `.tex` sudah LaTeX â€” mengkonversinya lagi akan meng-escape
-    # perintahnya sendiri, jadi dilewati.
+    # Markdown-first: draf disimpan sebagai Markdown (sumber kebenaran).
+    # Pengekstrak DOCX/PDF (pandoc) sudah menghasilkan Markdown â€” disimpan apa
+    # adanya. Berkas `.tex` dikonversi SEKALI ke Markdown supaya seluruh dokumen
+    # seragam; editor, pratinjau, dan ekspor tidak lagi bercabang dua format.
     new_doc.content = (
-        (text or "")
+        latex_to_markdown(text or "")
         if ext == ".tex"
-        else markdown_to_latex(text or "", preserve_source=True)
+        else (text or "")
     )
-    new_doc.content_format = "latex"
+    new_doc.content_format = "markdown"
     # Lapis 1 (PRD v2.8 Â§2, AST01): AST dibangun di perbatasan impor dan
-    # disimpan sebagai JSON. Preview "Pratinjau Rapi" merender dari AST ini â€”
-    # hasil ekstraksi yang sudah dirapikan, bukan teks LaTeX mentah.
-    if text and ext != ".tex":
+    # disimpan sebagai JSON untuk navigasi outline "Pratinjau Rapi" â€” hasil
+    # ekstraksi yang sudah dirapikan, bukan teks mentah.
+    if new_doc.content:
         try:
             # AST dibangun dari hasil pembersihan penuh (listing kode di-fence,
             # nomor halaman terisolasi dibuang) â€” struktur, bukan teks mentah.
             from app.services.doc_import import _rapikan
 
-            bersih = _rapikan(text, preserve_content=False)
+            bersih = _rapikan(new_doc.content, preserve_content=False)
             ast = markdown_to_ast(bersih, title=new_doc.title)
             new_doc.structured_content = ast.to_json()
         except Exception:  # noqa: BLE001 â€” AST gagal bukan alasan impor gagal
@@ -3670,12 +4326,11 @@ async def import_file_to_co_writer(
     await db.commit()
     await db.refresh(new_doc)
 
-    # Auto-extract outline (PRD v2.4 Â§1): heading dihitung dari perintah
-    # sectioning LaTeX hasil konversi, bukan lagi dari "#" Markdown.
+    # Auto-extract outline (PRD v2.4 Â§1): heading Markdown ("# ...").
     headings = [
-        judul
+        m.group(2).strip()
         for ln in (new_doc.content or "").splitlines()
-        if (judul := judul_dari_latex(ln))
+        if (m := re.match(r"^[ \t]*(#{1,6})\s+(.+?)\s*$", ln))
     ]
     result = _detail(new_doc)
     result.outline = {
