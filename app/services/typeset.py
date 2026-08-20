@@ -466,8 +466,8 @@ def _number_headings(html: str) -> str:
     # penomoran langsung dimulai dari heading bagian pertama.
     ada_markah_bab = any(
         re.match(r"^\s*(?:bab|chapter)\s+[ivxlcdm\d]+\b",
-                 re.sub(r"<[^>]+>", "", m).strip(), re.I)
-        for m in re.findall(r"<(h[1-6])>[\s\S]*?</\1>", html)
+                 re.sub(r"<[^>]+>", "", m.group(2)).strip(), re.I)
+        for m in re.finditer(r"<(h[1-6])>([\s\S]*?)</\1>", html)
     )
 
     def repl(match: re.Match) -> str:

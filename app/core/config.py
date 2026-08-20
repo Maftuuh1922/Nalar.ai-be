@@ -28,6 +28,13 @@ class Settings(BaseSettings):
     # CORS — daftar origin frontend yang diizinkan, dipisah koma
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001"
 
+    # Port tempat backend ini dilayani. Dipakai juga untuk menyusun URL absolut
+    # media hasil impor (/uploads/...): frontend hanya mem-proxy /api dan /ws,
+    # jadi URL gambar wajib menunjuk langsung ke backend. Nilainya pernah
+    # ditulis-tangan sebagai 8089 di beberapa tempat sementara server berjalan
+    # di 8087, sehingga setiap gambar dokumen impor gagal dimuat.
+    BACKEND_PORT: int = 8087
+
     # Direktori penyimpanan file upload dan ChromaDB (relatif terhadap working directory)
     UPLOAD_DIR: str = "uploads"
     CHROMA_DIR: str = "chroma_db"
@@ -46,6 +53,16 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+
+    @property
+    def backend_base_url(self) -> str:
+        """URL backend dari sudut pandang browser pengguna."""
+        return f"http://localhost:{self.BACKEND_PORT}"
+
+    @property
+    def backend_base_url_from_docker(self) -> str:
+        """URL backend dari sudut pandang container (mis. OnlyOffice Document Server)."""
+        return f"http://host.docker.internal:{self.BACKEND_PORT}"
 
 
 @lru_cache

@@ -16,7 +16,14 @@ import httpx
 def _authors(items: list[dict[str, Any]] | None) -> list[str]:
     result: list[str] = []
     for item in items or []:
-        name = item.get("name") or " ".join(filter(None, [item.get("given"), item.get("family")]))
+        # Crossref menaruh nama langsung pada item, sedangkan OpenAlex
+        # membungkusnya dalam ``authorship.author.display_name``.
+        nested_author = item.get("author") if isinstance(item.get("author"), dict) else {}
+        name = (
+            item.get("name")
+            or nested_author.get("display_name")
+            or " ".join(filter(None, [item.get("given"), item.get("family")]))
+        )
         if name:
             result.append(str(name).strip())
     return result[:12]
@@ -59,7 +66,7 @@ async def search_academic_references(query: str, limit: int = 5) -> list[dict[st
                     continue
                 date = item.get("published-print") or item.get("published-online") or item.get("issued") or {}
                 year = (date.get("date-parts") or [[None]])[0][0]
-                candidates[doi] = {"title": title, "authors": _authors(item.get("author")), "year": year, "doi": doi, "venue": (item.get("container-title") or [""])[0], "pages": item.get("page"), "source": "Crossref"}
+                candidates[doi] = {"title": title, "authors": _authors(item.get("author")), "year": year, "doi": doi, "url": f"https://doi.org/{doi}", "venue": (item.get("container-title") or [""])[0], "pages": item.get("page"), "source": "Crossref"}
         openalex = responses[1]
         if isinstance(openalex, httpx.Response) and openalex.is_success:
             for item in openalex.json().get("results", []):
@@ -67,7 +74,7 @@ async def search_academic_references(query: str, limit: int = 5) -> list[dict[st
                 title = (item.get("title") or "").strip()
                 if not doi or not title or doi in candidates:
                     continue
-                candidates[doi] = {"title": title, "authors": _authors(item.get("authorships")), "year": item.get("publication_year"), "doi": doi, "venue": ((item.get("primary_location") or {}).get("source") or {}).get("display_name", ""), "pages": None, "source": "OpenAlex"}
+                candidates[doi] = {"title": title, "authors": _authors(item.get("authorships")), "year": item.get("publication_year"), "doi": doi, "url": f"https://doi.org/{doi}", "venue": ((item.get("primary_location") or {}).get("source") or {}).get("display_name", ""), "pages": None, "source": "OpenAlex"}
         values = list(candidates.values())[: limit * 2]
         verified = await asyncio.gather(*(_verify_doi(client, item["doi"]) for item in values), return_exceptions=True)
         return [item for item, ok in zip(values, verified) if ok is True][:limit]

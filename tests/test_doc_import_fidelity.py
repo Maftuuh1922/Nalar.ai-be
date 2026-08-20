@@ -1,4 +1,5 @@
 import io
+import re
 
 import pytest
 
@@ -8,6 +9,7 @@ from app.services.doc_import import (
     _halaman_cover,
     _lolos_awalan_markdown,
     _save_bytes,
+    _sambung_paragraf,
     _heading_lanjutan,
     _pdf_to_markdown_sederhana,
     _rapikan,
@@ -159,9 +161,12 @@ def test_impor_pdf_gambar_mengikuti_posisi_baca_dan_sampul_di_center(tmp_path):
 
     assert hasil.startswith("<center>")
     assert hasil.rstrip().endswith("</center>")
-    posisi_judul = hasil.index("## LAPORAN TUGAS AKHIR")
+    # Baris sampul adalah teks tampilan tebal, bukan heading: judul dokumen dan
+    # nama institusi tidak boleh masuk daftar isi (lihat
+    # test_judul_sampul_tidak_menjadi_heading).
+    posisi_judul = hasil.index("**LAPORAN TUGAS AKHIR**")
     posisi_gambar = hasil.index("![Gambar]")
-    posisi_program = hasil.index("## PROGRAM DIPLOMA III")
+    posisi_program = hasil.index("**PROGRAM DIPLOMA III**")
     # Urutan baca asli: judul → logo → program (logo bukan di atas halaman).
     assert posisi_judul < posisi_gambar < posisi_program
     # Logo kecil di halaman → skala kecil (~0.17 dari \\textwidth), bukan
@@ -170,8 +175,120 @@ def test_impor_pdf_gambar_mengikuti_posisi_baca_dan_sampul_di_center(tmp_path):
     assert "?w=0.8" not in hasil
 
 
+def test_fragmen_satu_baris_visual_disatukan_tanpa_merusak_dua_kolom(tmp_path):
+    """Nomor bagian dan label sampul menyatu dengan pasangannya; kolom tidak.
+
+    LaTeX mencetak nomor `\\subsection` di kotak tersendiri, sehingga PyMuPDF
+    melaporkan "2.3" dan judulnya sebagai dua baris pada y yang SAMA. Dulu
+    keduanya jadi dua heading terpisah — daftar isi memuat entri "## 2.3" tanpa
+    judul (terukur 6 entri pada laporan uji). Label sampul terpecah dengan cara
+    yang sama ("NPM" lalu ": 613230021").
+
+    Jarak horizontal tidak bisa dipakai sebagai penanda: nomor bagian berjarak
+    14,4 pt dari judulnya, sedangkan dua kolom tanda tangan yang wajib tetap
+    terpisah hanya berjarak 15,9 pt. Karena itu penggabungan dibatasi pada
+    fragmen kiri berupa nomor bagian atau fragmen kanan yang dibuka titik dua.
+    """
+    fitz = pytest.importorskip("fitz")
+    doc = fitz.open()
+    page = doc.new_page()
+    # Nomor bagian + judul pada y sama (nomor di kotak terpisah).
+    page.insert_text((113.4, 200), "2.3", fontsize=14)
+    page.insert_text((145.7, 200), "Large Language Model dan Transformer", fontsize=14)
+    # Label + nilai pada tab stop (y sama).
+    page.insert_text((113.4, 300), "NPM", fontsize=11)
+    page.insert_text((160.0, 300), ": 613230021", fontsize=11)
+    # Dua kolom tanda tangan pada y sama — HARUS tetap dua baris.
+    page.insert_text((130.0, 400), "Pembimbing Utama", fontsize=11)
+    page.insert_text((330.0, 400), "Pembimbing Pendamping", fontsize=11)
+    try:
+        hasil = _pdf_to_markdown_sederhana(
+            doc, str(tmp_path), "http://x/uploads/d/images"
+        )
+    finally:
+        doc.close()
+
+    # Nomor bagian menyatu dengan judulnya menjadi SATU heading.
+    assert "## 2.3 Large Language Model dan Transformer" in hasil
+    assert not re.search(r"^#{1,6}\s*2\.3\s*$", hasil, re.M), hasil
+
+    # Label sampul menyatu dengan nilainya.
+    assert "NPM : 613230021" in hasil
+
+    # Kolom berdampingan tidak ikut disatukan.
+    assert "Pembimbing Utama Pembimbing Pendamping" not in hasil
+    assert "Pembimbing Utama" in hasil
+    assert "Pembimbing Pendamping" in hasil
+
+
+def test_judul_sampul_tidak_menjadi_heading(tmp_path):
+    r"""Judul dokumen yang diketik beberapa baris tidak jadi satu heading per baris.
+
+    Laporan kampus mengulang JUDUL di sampul dan di tiap lembar pengesahan, dan
+    judulnya diketik dalam beberapa baris visual. Dulu tiap baris jadi `##`
+    sendiri: pada laporan uji nyata muncul 106 heading, sehingga daftar isi
+    editor penuh entri satu kata dan pratinjau mencetak lima heading raksasa.
+    Judul dokumen dan nama institusi kini teks tampilan tebal; yang tetap
+    heading hanyalah bagian bernama ("LEMBAR PENGESAHAN") dan bab.
+    """
+    fitz = pytest.importorskip("fitz")
+    font = fitz.Font("helv")
+
+    def teks_tengah(page, teks, y, fontsize=14):
+        lebar = font.text_length(teks, fontsize=fontsize)
+        page.insert_text((311.8 - lebar / 2, y), teks, fontsize=fontsize)
+
+    doc = fitz.open()
+    # Sampul: judul 3 baris + "LAPORAN TUGAS AKHIR" + institusi.
+    p1 = doc.new_page()
+    teks_tengah(p1, "NALAR AI: PENGEMBANGAN INTELLIGENT TUTORING", 90, 16)
+    teks_tengah(p1, "SYSTEM BERBASIS AGENTIC AI DENGAN", 120, 16)
+    teks_tengah(p1, "RETRIEVAL-AUGMENTED GENERATION", 150, 16)
+    teks_tengah(p1, "LAPORAN TUGAS AKHIR", 200, 16)
+    teks_tengah(p1, "UNIVERSITAS LOGISTIK DAN BISNIS INTERNASIONAL", 600, 16)
+    # Lembar pengesahan: judul bagian + judul dokumen terulang.
+    p2 = doc.new_page()
+    teks_tengah(p2, "LEMBAR PENGESAHAN DOSEN PEMBIMBING", 90)
+    teks_tengah(p2, "NALAR AI: PENGEMBANGAN INTELLIGENT TUTORING", 130)
+    teks_tengah(p2, "SYSTEM BERBASIS AGENTIC AI DENGAN", 160)
+    # Isi laporan: bab dan sub-bab wajib tetap heading.
+    p3 = doc.new_page()
+    teks_tengah(p3, "BAB I PENDAHULUAN", 90)
+    p3.insert_text((113.4, 200), "1.1 Latar Belakang", fontsize=14)
+    try:
+        hasil = _pdf_to_markdown_sederhana(
+            doc, str(tmp_path), "http://x/uploads/d/images"
+        )
+    finally:
+        doc.close()
+
+    baris = hasil.splitlines()
+    heading = [b for b in baris if re.match(r"^#{1,6}\s", b)]
+
+    # Judul dokumen & institusi: teks tampilan, tidak pernah heading.
+    assert not any("NALAR AI" in h for h in heading), heading
+    assert not any("UNIVERSITAS" in h for h in heading), heading
+    assert not any("LAPORAN TUGAS AKHIR" in h for h in heading), heading
+    assert "**NALAR AI: PENGEMBANGAN INTELLIGENT TUTORING**" in hasil
+
+    # Bagian bernama dan struktur isi tetap heading.
+    assert any(h.startswith("# LEMBAR PENGESAHAN DOSEN PEMBIMBING") for h in heading), heading
+    assert any("PENDAHULUAN" in h for h in heading), heading
+    assert "## 1.1 Latar Belakang" in hasil
+
+    # Outline hanya berisi struktur nyata: pengesahan + bab + sub-bab.
+    assert len(heading) == 3, heading
+
+    # Satu blok tengah per halaman, bukan satu blok per baris: judul yang
+    # terpecah baris harus berada di dalam SATU blok bersama judul bagiannya.
+    assert hasil.count("<center>") == 3, hasil
+    blok_pengesahan = hasil.split("<center>")[2]
+    assert blok_pengesahan.count("**NALAR AI: PENGEMBANGAN INTELLIGENT TUTORING**") == 1
+    assert "**SYSTEM BERBASIS AGENTIC AI DENGAN**" in blok_pengesahan.split("</center>")[0]
+
+
 def test_heading_dan_baris_tengah_halaman_muka_dibungkus_blok_tengah(tmp_path):
-    """Heading muka (LEMBAR PENGESAHAN) dan baris tanda tangan yang di tengah
+    r"""Heading muka (LEMBAR PENGESAHAN) dan baris tanda tangan yang di tengah
     di PDF asli diketik di tengah halaman → ditandai blok tengah, bukan heading
     `\subsection*` rata kiri atau paragraf kiri."""
     fitz = pytest.importorskip("fitz")
@@ -253,8 +370,50 @@ def test_komentar_kode_di_paragraf_docx_tidak_menjadi_heading():
     )
     assert _lolos_awalan_markdown("> kutipan") == r"\> kutipan"
     assert _lolos_awalan_markdown("| a | b |") == r"\| a | b |"
-    assert _lolos_awalan_markdown("- butir") == r"\- butir"
-    assert _lolos_awalan_markdown("1. butir") == r"\1. butir"
+
+
+def test_kata_terpenggal_tanda_hubung_disatukan_kembali():
+    """LaTeX memenggal kata saat menjustifikasi; hubungnya jangan ditinggal.
+
+    Penggabungan baris dulu memakai spasi apa adanya, sehingga "Do-\\ncument"
+    menjadi "Do- cument". Terukur 354 kemunculan pada laporan uji — badan
+    dokumen penuh kata pecah seperti "sara- na", "efektivi- tas", "ber- diri".
+
+    Kata majemuk yang tanda hubungnya ASLI dan kebetulan jatuh di ujung baris
+    (mis. "meta-analitik") dirapatkan tanpa membuang hubungnya.
+    """
+    assert _sambung_paragraf(["berkas Portable Do-", "cument Format (PDF)"]) == [
+        "berkas Portable Document Format (PDF)"
+    ]
+    assert _sambung_paragraf(["menjadi sara-", "na utama pada"]) == [
+        "menjadi sarana utama pada"
+    ]
+    # Tanda hubung asli dipertahankan.
+    assert _sambung_paragraf(["Studi meta-", "analitik menunjukkan"]) == [
+        "Studi meta-analitik menunjukkan"
+    ]
+    # Baris berikutnya berhuruf besar → bukan penggalan kata, jangan disatukan.
+    assert _sambung_paragraf(["tanda hubung -", "Bagian Baru dimulai"])[0].startswith(
+        "tanda hubung -"
+    )
+
+
+def test_penanda_daftar_tidak_di_escape_karena_daftarnya_asli():
+    """Daftar bernomor/butir laporan harus tetap jadi daftar, bukan "\\1.".
+
+    Escaping dulu mencakup `-`, `*`, dan `1.` juga. Pada laporan uji itu
+    menghasilkan 105 baris `\\1.` dan 4 baris `\\-` yang SELURUHNYA daftar
+    sungguhan (surat pernyataan, ucapan terima kasih, butir analisis) — garis
+    miringnya tercetak apa adanya di editor. Sebaliknya `#` hanya muncul 3 kali
+    dan ketiganya komentar kode Python di lampiran, satu-satunya bentuk yang
+    benar-benar merusak bila dibiarkan.
+    """
+    assert _lolos_awalan_markdown("1. butir") == "1. butir"
+    assert _lolos_awalan_markdown("- butir") == "- butir"
+    assert _lolos_awalan_markdown("* butir") == "* butir"
+    assert _lolos_awalan_markdown("2) butir") == "2) butir"
+    # Komentar kode tetap dilindungi.
+    assert _lolos_awalan_markdown("# Perkakas lanjutan") == r"\# Perkakas lanjutan"
 
 
 def test_teks_biasa_tidak_ikut_di_escape():

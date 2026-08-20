@@ -19,9 +19,13 @@ dikenali sebagai tabel markdown; isinya tetap muncul sebagai teks.
 from __future__ import annotations
 
 import io
+import logging
 import os
 import re
 import zipfile
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # Heading jika ukuran font >= ambang ini atau bold + besar (jalur cadangan).
 _HEADING_FONT_MIN = 14.0
@@ -160,10 +164,12 @@ def _ext_images_from_bytes(
 def pdf_to_markdown(contents: bytes, images_dir: str, base_url: str, doc_id: str) -> str:
     """PDF → markdown + ekstrak gambar.
 
-    Memakai ekstraksi PyMuPDF langsung (heading dari ukuran font, satu baris per
-    baris tampilan) — hasilnya kasar (paragraf tidak tersambung) tapi 20× lebih
-    cepat daripada pymupdf4llm untuk dokumen besar. Impor PDF 89 halaman: 16 detik
-    vs 270+ detik, cukup untuk editor teks yang naskahnya bisa diperbaiki manual.
+    Jalur utama: PDF dikonversi ke DOCX kerja dulu lalu diekstrak dengan
+    markitdown (paragraf tersambung, tabel rapi, tanpa HTML mentah) —
+    hasilnya jauh lebih rapi daripada PyMuPDF manual. Bila markitdown atau
+    DOCX tidak tersedia, fallback ke ekstraksi PyMuPDF sederhana (20× lebih
+    cepat daripada pymupdf4llm untuk dokumen besar, cukup untuk editor teks
+    yang naskahnya bisa diperbaiki manual).
     """
     import fitz  # PyMuPDF
 
@@ -177,6 +183,44 @@ def pdf_to_markdown(contents: bytes, images_dir: str, base_url: str, doc_id: str
         doc.close()
 
     return _rapikan(markdown)
+
+
+def pdf_docx_to_markdown(
+    docx_path: str | Path | None,
+    contents: bytes,
+    images_dir: str,
+    base_url: str,
+    doc_id: str,
+) -> str:
+    """PDF (yang sudah jadi DOCX kerja) → markdown rapi via markitdown.
+
+    markitdown membaca DOCX hasil pipeline pdf2docx/postprocess dan
+    menghasilkan markdown berstruktur (paragraf tersambung, tabel markdown,
+    heading) — menggantikan hasil kasar pandoc/PyMuPDF manual untuk mode
+    sumber/editor. Bila markitdown tidak terpasang atau gagal, fallback ke
+    ekstraksi PyMuPDF sederhana.
+    """
+    try:
+        from markitdown import MarkItDown
+
+        if docx_path is None or not Path(docx_path).exists():
+            raise FileNotFoundError(docx_path)
+        md = MarkItDown()
+        res = md.convert(str(docx_path), file_extension=".docx")
+        out = (res.text_content or "").strip()
+        # markitdown menghasilkan tabel pipa untuk layout teks acak; bila
+        # hasilnya didominasi tabel noise (>=20% baris), buang dan fallback.
+        baris = out.splitlines()
+        if baris:
+            tabel = sum(1 for ln in baris if ln.lstrip().startswith("|"))
+            if tabel / len(baris) >= 0.2:
+                raise ValueError(f"markitdown: output didominasi tabel layout ({tabel}/{len(baris)})")
+        if len(out) < 200:
+            raise ValueError("markitdown: output terlalu pendek")
+        return _rapikan(out)
+    except Exception as exc:  # noqa: BLE001 — markitdown gagal bukan alasan impor gagal
+        logger.warning("markitdown gagal (%s); fallback PyMuPDF sederhana.", exc)
+        return pdf_to_markdown(contents, images_dir, base_url, doc_id)
 
 
 # Penanda highlight bawaan dari pengekstrak HTML; markdown2 tidak mengenalnya
@@ -242,7 +286,14 @@ def _pulihkan_baris_kode(pecah: list[str]) -> list[str]:
 
 # Penanda blok Markdown di awal baris: pagar heading, kutipan, tabel pipa,
 # penanda daftar, dan daftar bernomor.
-_AWALAN_BLOK_MD = re.compile(r"^(\s*)(#{1,6}(?=\s|$)|>|\||[-*+](?=\s)|\d{1,3}[.)](?=\s))")
+# Penanda DAFTAR (`-`, `*`, `1.`) sengaja TIDAK dilindungi: pada laporan akademik
+# baris semacam itu memang daftar sungguhan (surat pernyataan, ucapan terima
+# kasih, butir analisis), dan melindunginya membuat "\1." tercetak apa adanya di
+# editor. Terukur pada laporan uji: 105 baris `\N.` dan 4 baris `\-` seluruhnya
+# daftar asli, sedangkan `#` hanya muncul 3 kali dan ketiganya komentar kode
+# Python di lampiran — satu-satunya bentuk yang benar-benar merusak bila dibiarkan
+# (menjadi heading H1 lalu `\section*`, mengacaukan outline dan pemecahan bab).
+_AWALAN_BLOK_MD = re.compile(r"^(\s*)(#{1,6}(?=\s|$)|>|\|)")
 
 
 def _lolos_awalan_markdown(teks: str) -> str:
@@ -296,6 +347,53 @@ def _fence_listing(baris: list[str]) -> list[str]:
     return keluar
 
 
+
+# Kata yang terputus oleh pemenggalan baris PDF: baris berakhir tanda hubung dan
+# baris berikutnya dibuka huruf kecil. LaTeX memenggal kata saat menjustifikasi
+# ("Do-\ncument"), sehingga penggabungan naif menyisakan "Do- cument". Terukur
+# 356 kemunculan pada laporan uji 89 halaman.
+_HUBUNG_PENGGAL = re.compile(r"(\w)-$")
+_KATA_SEBELUM_HUBUNG = re.compile(r"([A-Za-zÀ-ÿ]+)-$")
+
+# Kata majemuk yang tanda hubungnya ASLI dan kebetulan jatuh di ujung baris.
+# Tanpa daftar ini "meta-analitik" ikut disatukan menjadi "metaanalitik".
+# Penggalan lunak jauh lebih sering (terukur ~25:2 pada laporan uji), jadi
+# default-nya menyatukan; hanya bentuk di bawah yang mempertahankan hubungnya.
+_MAJEMUK_BERHUBUNG = frozenset({
+    "meta", "tanya", "recency", "mastery", "retrieval", "context", "self",
+    "non", "pra", "pasca", "anti", "multi", "antar", "sub", "pseudo", "semi",
+    "co", "e", "in", "ex", "re", "pre", "post", "open", "closed", "end",
+})
+
+
+def _gabung_kata_terpenggal(kiri: str, kanan: str) -> str:
+    """Sambung dua baris; kata yang terputus tanda hubung disatukan kembali."""
+    if not _HUBUNG_PENGGAL.search(kiri) or not kanan[:1].islower():
+        return f"{kiri} {kanan}"
+    kata_kiri = _KATA_SEBELUM_HUBUNG.search(kiri)
+    if kata_kiri and kata_kiri.group(1).lower() in _MAJEMUK_BERHUBUNG:
+        # Hubungnya asli: rapatkan tanpa spasi ("meta-" + "analitik").
+        return f"{kiri}{kanan}"
+    return f"{kiri[:-1]}{kanan}"
+
+
+def _sel_tabel_bersih(nilai: object) -> str:
+    """Isi satu sel tabel PDF jadi satu baris, kata terpenggal disatukan.
+
+    Sel bisa memuat beberapa baris tercetak; meratakannya dengan spasi apa adanya
+    menyisakan kata pecah seperti "Diha- rapkan" (kepala tabel "Hasil yang
+    Diharapkan"). Terukur 28 kemunculan di dalam tabel pada laporan uji.
+    """
+    teks = (str(nilai) if nilai is not None else "").replace("\r", "\n")
+    baris = [b.strip() for b in teks.split("\n") if b.strip()]
+    if not baris:
+        return ""
+    hasil = baris[0]
+    for lanjut in baris[1:]:
+        hasil = _gabung_kata_terpenggal(hasil, lanjut)
+    return hasil.strip()
+
+
 def _tabel_baris_ke_markdown(rows: list[list]) -> str | None:
     """Baris sel hasil `find_tables` → tabel pipa markdown; None bila noise.
 
@@ -306,10 +404,7 @@ def _tabel_baris_ke_markdown(rows: list[list]) -> str | None:
     """
     bersih: list[list[str]] = []
     for r in rows:
-        sel = [
-            (str(c) if c is not None else "").replace("\n", " ").replace("\r", " ").strip()
-            for c in r
-        ]
+        sel = [_sel_tabel_bersih(c) for c in r]
         if any(sel):
             bersih.append(sel)
     if len(bersih) < 2:
@@ -348,21 +443,28 @@ def _adalah_heading(size: float, teks: str) -> bool:
 def _baris_center(x0: float, x1: float, lebar_teks: float) -> bool:
     """Apakah baris PDF di-tengah (bukan rata kiri/justify penuh)?
 
-    Judul halaman muka ("LEMBAR PENGESAHAN..."), judul bab ("Bab 1"), dan
-    baris tanda tangan diketik di tengah halaman: pusatnya mendekati tengah
-    area teks dan lebarnya jauh di bawah lebar teks penuh. Baris justify yang
-    mengisi penuh halaman (x0 di margin kiri, x1 di margin kanan) bukan baris
-    tengah — pusat geometrinya memang di tengah, tapi lebarnya ~textwidth.
+    Judul halaman muka ("LEMBAR PENGESAHAN..."), judul bab ("Bab 1"), dan baris
+    tanda tangan diketik di tengah halaman. Pembedanya terhadap baris justify
+    BUKAN lebar, melainkan celah ke margin: baris justify berakhir TEPAT di kedua
+    margin sehingga celahnya nol (bahkan sedikit negatif karena pembulatan bbox),
+    sedangkan baris tengah menyisakan celah simetris di kiri dan kanan.
+
+    Aturan lama menolak baris tengah yang lebih lebar dari 0,85 × lebar teks dan
+    yang mulai <30 pt dari margin. Judul dokumen yang panjang ("NALAR AI:
+    PENGEMBANGAN INTELLIGENT TUTORING" — 91% lebar teks, celah 17 pt) karena itu
+    dinilai justify padahal terpusat sempurna, sehingga satu judul terpecah:
+    sebagian barisnya masuk blok `<center>`, sebagian tidak.
+
+    Uji simetri juga yang membedakan terhadap baris ber-indentasi menggantung
+    (daftar pustaka, lanjutan butir) yang kebetulan berada di sekitar tengah —
+    indentasinya tetap, tapi ujung kanannya berhenti sembarang.
     """
-    tengah = (x0 + x1) / 2
-    # Area teks kampus: kiri 4 cm, kanan 3 cm; pusatnya dipakai sebagai acuan.
-    pusat_area = 4 * _CM_PT + lebar_teks / 2
-    return (
-        # Tepi kiri menjauh dari margin (baris justify berindent tetap dekat kiri).
-        x0 > 4 * _CM_PT + 30
-        and abs(tengah - pusat_area) < 30
-        and (x1 - x0) < 0.85 * lebar_teks
-    )
+    margin_kiri = 4 * _CM_PT
+    celah_kiri = x0 - margin_kiri
+    celah_kanan = (margin_kiri + lebar_teks) - x1
+    if min(celah_kiri, celah_kanan) <= 8:
+        return False
+    return abs(celah_kiri - celah_kanan) <= 6
 
 
 # Penanda halaman sampul laporan akademik. Baris judul semata (tanpa penanda)
@@ -417,6 +519,54 @@ def _tingkat_heading(teks: str) -> int:
     return 2
 
 
+# Nomor bagian yang berdiri sendiri sebagai fragmen ("2.3", "3.1.2"). LaTeX
+# mencetak nomor \subsection di kotak terpisah, sehingga PyMuPDF melaporkannya
+# sebagai baris tersendiri pada y yang SAMA dengan judulnya.
+_NOMOR_SAJA = re.compile(r"^\d+(?:\.\d+)*\.?$")
+
+
+def _gabung_fragmen_sebaris(
+    items: list[tuple[float, str, float, float, float]],
+) -> list[tuple[float, str, float, float, float]]:
+    """Satukan fragmen yang sebenarnya SATU baris visual (y sama).
+
+    PyMuPDF memecah satu baris menjadi beberapa "line" bila ada jarak horizontal
+    besar — mis. nomor `\\subsection` dalam kotaknya sendiri, atau label sampul
+    yang nilainya diketik pada tab stop. Akibatnya judul bagian terpisah dari
+    nomornya ("## 2.3" lalu "## Large Language Model ...", dua entri daftar isi;
+    terukur 6 entri cacat pada laporan uji) dan label sampul terpecah ("NPM"
+    lalu ": 613230021").
+
+    Penggabungan sengaja DIBATASI pada dua bentuk yang tidak ambigu: fragmen kiri
+    berupa nomor bagian, atau fragmen kanan yang dibuka titik dua. Jarak saja
+    tidak bisa dipakai sebagai penanda — nomor bagian berjarak 14,4 pt dari
+    judulnya, sedangkan dua kolom tanda tangan yang WAJIB tetap terpisah hanya
+    berjarak 15,9 pt.
+    """
+    per_y: dict[float, list[tuple[float, str, float, float, float]]] = {}
+    for it in items:
+        kunci = next((k for k in per_y if abs(k - it[0]) <= 1.5), it[0])
+        per_y.setdefault(kunci, []).append(it)
+
+    hasil: list[tuple[float, str, float, float, float]] = []
+    for baris in per_y.values():
+        baris.sort(key=lambda x: x[3])
+        aktif = list(baris[0])
+        for lanjut in baris[1:]:
+            kiri = str(aktif[1]).strip()
+            kanan = str(lanjut[1]).strip()
+            celah = lanjut[3] - aktif[4]
+            if celah < 25 and (_NOMOR_SAJA.match(kiri) or kanan.startswith(":")):
+                aktif[1] = f"{kiri} {kanan}"
+                aktif[2] = max(aktif[2], lanjut[2])
+                aktif[4] = lanjut[4]
+            else:
+                hasil.append(tuple(aktif))  # type: ignore[arg-type]
+                aktif = list(lanjut)
+        hasil.append(tuple(aktif))  # type: ignore[arg-type]
+    return hasil
+
+
 def _pdf_to_markdown_sederhana(doc, images_dir: str, base_url: str) -> str:
     """Cadangan: heading dari ukuran font, tabel dari find_tables, paragraf disambung.
 
@@ -434,6 +584,9 @@ def _pdf_to_markdown_sederhana(doc, images_dir: str, base_url: str) -> str:
     # Sampul (halaman 0) ditutup `</center>` yang sudah menyisipkan `\newpage`
     # di markdown_to_latex — halaman berikutnya tidak perlu penanda lagi.
     cover_halaman0 = False
+    # Blok `<center>` dibuka/ditutup lintas baris (dan lintas halaman) agar baris
+    # tengah yang berurutan menyatu, bukan satu blok per baris.
+    dalam_center = False
     for page_index, page in enumerate(doc):
         items: list[tuple[float, str, float, float, float]] = []
         for block in page.get_text("dict")["blocks"]:
@@ -493,7 +646,18 @@ def _pdf_to_markdown_sederhana(doc, images_dir: str, base_url: str) -> str:
         def _dalam_tabel(y: float) -> bool:
             return any(y0 - 2 <= y <= y1 + 2 for y0, y1 in tabel_y)
 
-        halaman_lines: list[str] = []
+        # Fragmen satu baris visual disatukan dulu (nomor bagian + judulnya,
+        # label sampul + nilainya). Isi tabel dilewati: sel tabel juga berbagi y,
+        # dan `find_tables` sudah mengekstraknya sendiri.
+        items = [it for it in items if _dalam_tabel(it[0])] + _gabung_fragmen_sebaris(
+            [it for it in items if not _dalam_tabel(it[0])]
+        )
+
+        # Baris halaman disimpan bersama penanda "di tengah" supaya baris tengah
+        # yang BERURUTAN digabung menjadi SATU blok `<center>` di akhir. Satu blok
+        # per baris membuat halaman pengesahan berisi blok tengah satu-baris yang
+        # berselang-seling — persis keluhan "tidak rapi".
+        halaman_lines: list[tuple[bool, str]] = []
         teks_urut = sorted(items, key=lambda x: x[0])
         gambar_urut = sorted(penempatan, key=lambda x: x[0])
         i_t, i_g = 0, 0
@@ -514,7 +678,8 @@ def _pdf_to_markdown_sederhana(doc, images_dir: str, base_url: str) -> str:
                     and abs(gambar_terakhir[0] - y) < 3
                     and gambar_terakhir[1] == url
                 ):
-                    halaman_lines.append(f"![Gambar]({url})")
+                    # Gambar sampul ikut ke dalam blok tengah halaman sampul.
+                    halaman_lines.append((is_cover, f"![Gambar]({url})"))
                     gambar_terakhir = (y, url)
                 i_g += 1
                 continue
@@ -525,9 +690,9 @@ def _pdf_to_markdown_sederhana(doc, images_dir: str, base_url: str) -> str:
                 continue
             # Tabel yang puncaknya sudah lewat disisipkan di posisi semula.
             while kursor_tabel < len(tabel_md) and tabel_md[kursor_tabel][0] < y - 2:
-                halaman_lines.append("")
-                halaman_lines.append(tabel_md[kursor_tabel][1])
-                halaman_lines.append("")
+                halaman_lines.append((False, ""))
+                halaman_lines.append((False, tabel_md[kursor_tabel][1]))
+                halaman_lines.append((False, ""))
                 kursor_tabel += 1
             stripped = teks.strip()
             # Nomor halaman yang terisolasi di margin atas/bawah ("i", "ii",
@@ -541,27 +706,38 @@ def _pdf_to_markdown_sederhana(doc, images_dir: str, base_url: str) -> str:
                 continue
             # Baris di tengah halaman (judul muka, judul bab, tanda tangan)
             # ditandai blok tengah supaya LaTeX mencetaknya di tengah, bukan
-            # paragraf rata kiri. Sampul dibungkus utuh di bawah, jadi barisnya
-            # tidak perlu ditandai satu per satu.
-            di_tengah = _baris_center(x0, x1, lebar_teks_pt) and not is_cover
+            # paragraf rata kiri. Seluruh isi halaman sampul dianggap tengah agar
+            # menyatu jadi satu blok.
+            di_tengah = is_cover or _baris_center(x0, x1, lebar_teks_pt)
             if _adalah_heading(ukuran, teks):
-                tingkat = "#" * _tingkat_heading(stripped)
+                tingkat_n = _tingkat_heading(stripped)
+                tingkat = "#" * tingkat_n
                 if di_tengah:
-                    punya_heading_center = True
-                    halaman_lines.append(f"<center>\n{tingkat} {stripped}\n</center>")
+                    # Judul DOKUMEN dan nama institusi bukan struktur: laporan
+                    # kampus mengulangnya di sampul dan di tiap lembar pengesahan,
+                    # diketik beberapa baris visual. Sebagai heading, tiap baris
+                    # jadi entri daftar isi sendiri — terukur 106 heading pada
+                    # laporan uji, daftar isi penuh entri satu kata. Yang tetap
+                    # heading hanyalah bagian bernama ("LEMBAR PENGESAHAN") dan
+                    # bab, yaitu yang dinilai tingkat 1 oleh _tingkat_heading.
+                    if tingkat_n == 1:
+                        punya_heading_center = True
+                        halaman_lines.append((True, f"{tingkat} {stripped}"))
+                    else:
+                        halaman_lines.append((True, f"**{stripped}**"))
                 else:
-                    halaman_lines.append(f"{tingkat} {stripped}")
+                    halaman_lines.append((False, f"{tingkat} {stripped}"))
             # Baris yang bukan heading/tengah: paragraf biasa. Awalan penanda
             # Markdown di-escape supaya baris komentar kode ("# Perkakas ...")
             # di lampiran tidak tercipta menjadi heading H1 yang mengacaukan bab.
             elif di_tengah:
-                halaman_lines.append(f"<center>\n{teks.rstrip()}\n</center>")
+                halaman_lines.append((True, teks.rstrip()))
             else:
-                halaman_lines.append(_lolos_awalan_markdown(teks.rstrip()))
+                halaman_lines.append((False, _lolos_awalan_markdown(teks.rstrip())))
         while kursor_tabel < len(tabel_md):
-            halaman_lines.append("")
-            halaman_lines.append(tabel_md[kursor_tabel][1])
-            halaman_lines.append("")
+            halaman_lines.append((False, ""))
+            halaman_lines.append((False, tabel_md[kursor_tabel][1]))
+            halaman_lines.append((False, ""))
             kursor_tabel += 1
 
         # Gambar yang terdaftar di resource halaman tapi tidak terdeteksi
@@ -569,27 +745,37 @@ def _pdf_to_markdown_sederhana(doc, images_dir: str, base_url: str) -> str:
         sisa = [
             u
             for u in images_by_page.get(page_index, [])
-            if not any(u in ln for ln in halaman_lines)
+            if not any(u in ln for _, ln in halaman_lines)
         ]
         if sisa:
-            halaman_lines.append("")
-            halaman_lines.extend(f"![Gambar]({u})" for u in sisa)
-            halaman_lines.append("")
+            halaman_lines.append((False, ""))
+            halaman_lines.extend((False, f"![Gambar]({u})") for u in sisa)
+            halaman_lines.append((False, ""))
 
-        # Sampul: seluruh isi halaman pertama dibungkus blok tengah supaya
-        # konversi ke LaTeX memakai \\begin{center} + teks tebal, bukan heading
-        # \\subsection* yang dicetak rata kiri.
-        if is_cover:
-            halaman_lines = ["<center>", *halaman_lines, "</center>"]
-        elif punya_heading_center and page_index > 0:
+        if not is_cover and punya_heading_center and page_index > 0:
             # Bagian muka/awal bab: paksa halaman baru di LaTeX. Halaman
             # lanjutan (mis. halaman 2 kata pengantar) tidak memuat heading
             # tengah, jadi mengalir menyambung seperti aslinya.
             # Halaman pertama setelah sampul tidak perlu penanda — `</center>`
             # sampul sudah memberi `\newpage` (mencegah halaman kosong ganda).
             if not (page_index == 1 and cover_halaman0):
-                halaman_lines.insert(0, "<newpage>")
-        md_lines.extend(halaman_lines)
+                halaman_lines.insert(0, (False, "<newpage>"))
+
+        # Baris tengah yang berurutan dibungkus SATU blok `<center>`.
+        for di_tengah_baris, teks_baris in halaman_lines:
+            if di_tengah_baris and not dalam_center:
+                md_lines.append("<center>")
+                dalam_center = True
+            elif not di_tengah_baris and dalam_center:
+                md_lines.append("</center>")
+                dalam_center = False
+            md_lines.append(teks_baris)
+        # Blok ditutup di akhir halaman: batas halaman PDF adalah batas blok
+        # tengah yang bermakna (sampul, tiap lembar pengesahan). Membiarkannya
+        # terbuka membuat sampul dan lembar pengesahan menyatu jadi satu blok.
+        if dalam_center:
+            md_lines.append("</center>")
+            dalam_center = False
 
     merged: list[str] = []
     for ln in md_lines:
@@ -698,6 +884,7 @@ def _boleh_sambung(baris: str, berikut: str) -> bool:
     return berikut.lstrip()[:1].islower()
 
 
+
 def _sambung_paragraf(baris: list[str]) -> list[str]:
     """Gabungkan baris yang terpecah oleh pemenggalan baris PDF."""
     hasil: list[str] = []
@@ -706,7 +893,7 @@ def _sambung_paragraf(baris: list[str]) -> list[str]:
         sekarang = baris[i].rstrip()
         # Terus sambung selama baris sesudahnya masih lanjutan paragraf ini.
         while i + 1 < len(baris) and _boleh_sambung(sekarang, baris[i + 1]):
-            sekarang = f"{sekarang} {baris[i + 1].strip()}"
+            sekarang = _gabung_kata_terpenggal(sekarang, baris[i + 1].strip())
             i += 1
         hasil.append(sekarang)
         i += 1

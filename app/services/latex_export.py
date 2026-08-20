@@ -677,6 +677,20 @@ def markdown_to_latex(markdown_text: str, *, preserve_source: bool = False) -> s
         ):
             isi_awal = False
 
+        # Baris blok tengah dari impor PDF yang seluruhnya tebal (`**JUDUL**`).
+        # Impor tidak lagi menjadikannya heading `##` — judul sampul dan judul
+        # dokumen yang terulang di lembar pengesahan bukan struktur dan dulu
+        # mencemari daftar isi — jadi ukuran cetaknya diberikan di sini. Baris itu
+        # berasal dari teks ≥14 pt di PDF asli, dan sebelumnya tercetak sebagai
+        # `\textbf{\large}` (sampul) atau `\subsection*` (pengesahan) yang
+        # keduanya ~14 pt; `\large` menjaga tingginya tetap sama.
+        if in_center:
+            m = re.fullmatch(r"\*\*(.+?)\*\*", stripped)
+            if m:
+                out.append(f"\\textbf{{\\large {_inline(m.group(1))}}}")
+                i += 1
+                continue
+
         # Heading
         m = re.match(r"^(#{1,4})\s+(.*)$", stripped)
         if m:

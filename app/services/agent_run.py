@@ -34,6 +34,13 @@ from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.agentic_chat import _parse_dsml_tool_calls, _strip_dsml, _DSML_START
+from app.services.citation_tools import (
+    SitasiError,
+    bibliografi_markdown,
+    cite_add,
+    cite_list,
+    ref_read,
+)
 from app.services.document_tools import (
     read_document,
     search_in_document,
@@ -46,13 +53,65 @@ logger = logging.getLogger(__name__)
 
 
 # --------------------------------------------------------------------------- #
+# Anggaran token keluaran per iterasi.
+#
+# Berbeda dari `research_chat.output_token_budget()` yang menganggarkan satu
+# balasan chat pendek ("Maksimal 220 kata" → 2.700 token termasuk cadangan
+# penalaran), loop ini menulis potongan dokumen sebagai argumen JSON tool.
+# Anggaran yang terlalu kecil membuat argumen `doc_insert` terpotong dan isinya
+# hilang, jadi angka di sini disengaja lebih besar.
+#
+# `_CADANGAN_PENALARAN` ditambahkan DI ATAS anggaran isi, bukan diambil darinya:
+# model aktif proyek ini mendaftarkan diri sebagai ["text"]/["text","tools"]
+# namun tetap mengirim jejak penalaran yang memakan `max_tokens` (lihat
+# tests/test_agentic_writer_penalaran.py). Tanpa cadangan itu, giliran pertama
+# berakhir `finish_reason="length"` tanpa satu tool call.
+# --------------------------------------------------------------------------- #
+_ANGGARAN_ISI = 4000
+_CADANGAN_PENALARAN = 1200
+# Batas atas saat percobaan ulang. Lebih tinggi dari
+# `agentic_writer._ANGGARAN_ULANG_MAKS` (6000) yang hanya perlu memuat satu
+# jawaban chat; di sini satu giliran harus memuat jejak penalaran DAN argumen
+# tool berisi satu sub-bagian dokumen.
+_ANGGARAN_ULANG_MAKS = 12000
+
+
+def _anggaran_awal(context_window: int) -> int:
+    """Anggaran keluaran satu iterasi, dibatasi jendela konteks model."""
+    budget = _ANGGARAN_ISI + _CADANGAN_PENALARAN
+    context_cap = max(1500, int(context_window or 8000) // 4)
+    return max(1500, min(budget, context_cap))
+
+
+def _anggaran_naik(max_tokens: int, context_window: int) -> int:
+    """Anggaran percobaan ulang saat penalaran menghabiskan anggaran.
+
+    Rumus mengikuti `agentic_writer.ask()` (kali tiga, dengan lantai), hanya
+    dengan langit-langit yang lebih tinggi untuk memuat argumen tool.
+    """
+    context_cap = max(1500, int(context_window or 8000) // 4)
+    naik = min(_ANGGARAN_ULANG_MAKS, max(max_tokens * 3, 2500))
+    return min(naik, context_cap)
+
+
+# --------------------------------------------------------------------------- #
 # Mode eksekusi (default "seimbang"). Menyetel kedalaman loop, suhu, dan apakah
 # riset web otonom diaktifkan. Tetap menghormati capability_tier di endpoint.
+#
+# Batas iterasi dihitung dari pekerjaan nyata "satu bab utuh": tiap sub-bab butuh
+# ~4 panggilan (set_task_status → find_in_document → doc_insert → set_task_status),
+# dan bab dengan 6 sub-bab yang memuat sitasi menambah ~2 panggilan riset per
+# sub-bab (search_web/arxiv_search → cite_add). Jadi satu bab bersitasi memerlukan
+# ~40 iterasi; "seimbang" yang dulu 24 selalu kehabisan iterasi di tengah bab dan
+# berhenti dengan tugas masih 'pending'.
 # --------------------------------------------------------------------------- #
 _MODES: dict[str, dict[str, Any]] = {
-    "cepat": {"max_iterations": 12, "temperature": 0.3, "web": False},
-    "seimbang": {"max_iterations": 24, "temperature": 0.4, "web": True},
-    "menyeluruh": {"max_iterations": 48, "temperature": 0.5, "web": True},
+    # "cepat" untuk suntingan setempat: web dimatikan supaya tidak ada jeda riset.
+    # Konsekuensinya `cite_add` tak punya sumber terverifikasi, jadi mode ini
+    # memang bukan untuk menulis bagian bersitasi.
+    "cepat": {"max_iterations": 16, "temperature": 0.3, "web": False},
+    "seimbang": {"max_iterations": 44, "temperature": 0.4, "web": True},
+    "menyeluruh": {"max_iterations": 72, "temperature": 0.5, "web": True},
 }
 _DEFAULT_MODE = "seimbang"
 
@@ -265,6 +324,103 @@ _TOOL_CITE_INSERT = {
     },
 }
 
+_TOOL_CITE_ADD = {
+    "type": "function",
+    "function": {
+        "name": "cite_add",
+        "description": (
+            "Simpan SATU sumber terverifikasi ke perpustakaan referensi dan dapatkan "
+            "nomor sitasinya. Server yang menentukan nomornya lalu mengembalikannya "
+            "(mis. {\"sitasi\": \"[3]\"}); tulis nomor ITU apa adanya di teks. "
+            "JANGAN pernah mengarang nomor sitasi sendiri. Pakai hanya metadata dari "
+            "hasil search_web/arxiv_search/fetch_webpage — jangan mengarang judul, "
+            "penulis, atau DOI. Sumber yang sama (DOI/judul) mengembalikan nomor "
+            "yang sudah ada, jadi aman dipanggil ulang. Nomor inilah yang membuat "
+            "Daftar Pustaka terisi otomatis."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Judul sumber (wajib)."},
+                "authors": {
+                    "type": "array",
+                    "items": {"type": "string", "description": "Nama penulis 'Depan Belakang'."},
+                    "description": "Daftar penulis (wajib, minimal satu).",
+                },
+                "year": {"type": "integer", "description": "Tahun terbit."},
+                "journal": {"type": "string", "description": "Nama jurnal/konferensi/penerbit."},
+                "doi": {"type": "string", "description": "DOI bila ada."},
+                "url": {"type": "string", "description": "URL sumber bila ada."},
+            },
+            "required": ["title", "authors"],
+            "additionalProperties": False,
+        },
+    },
+}
+
+_TOOL_CITE_LIST = {
+    "type": "function",
+    "function": {
+        "name": "cite_list",
+        "description": (
+            "Lihat sumber yang sudah tersimpan beserta nomor sitasinya. Panggil ini "
+            "sebelum menulis bagian berisi rujukan supaya klaim yang memakai sumber "
+            "sama memakai nomor yang sama, dan supaya kamu tahu nomor yang sah."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        },
+    },
+}
+
+_TOOL_REF_READ = {
+    "type": "function",
+    "function": {
+        "name": "ref_read",
+        "description": (
+            "Baca ISI satu sumber di perpustakaan referensi pengguna (jurnal yang "
+            "diunggah sendiri maupun sumber hasil riset). Pakai ini untuk menulis "
+            "tinjauan pustaka yang benar-benar bersumber dari bacaan, bukan dari "
+            "ingatan. Argumen `reference` boleh nomor sitasi ('3' atau '[3]'), "
+            "judul, atau id. Untuk sumber daring, tool akan memberi URL-nya supaya "
+            "kamu lanjut dengan fetch_webpage."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "reference": {
+                    "type": "string",
+                    "description": "Nomor sitasi, judul, atau id sumber.",
+                },
+                "max_chars": {"type": "integer", "description": "Batas panjang kutipan isi."},
+            },
+            "required": ["reference"],
+            "additionalProperties": False,
+        },
+    },
+}
+
+_TOOL_BIBLIOGRAPHY = {
+    "type": "function",
+    "function": {
+        "name": "cite_bibliography",
+        "description": (
+            "WAJIB dipanggil sebagai tugas TERAKHIR bila naskah memuat sitasi [n]. "
+            "Server memindai sitasi yang benar-benar kamu tulis lalu mengembalikan "
+            "blok DAFTAR PUSTAKA yang sudah diformat (IEEE). Sisipkan hasilnya "
+            "APA ADANYA dengan doc_insert di akhir dokumen — jangan menyusun "
+            "daftar pustaka sendiri dan jangan mengubah teksnya."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        },
+    },
+}
+
 _TOOL_FIND_IN_DOC = {
     "type": "function",
     "function": {
@@ -293,6 +449,10 @@ def _build_tools(mode_cfg: dict[str, Any], allow_web: bool) -> list[dict]:
         _TOOL_DOC_INSERT,
         _TOOL_DOC_REPLACE,
         _TOOL_CITE_INSERT,
+        _TOOL_CITE_ADD,
+        _TOOL_CITE_LIST,
+        _TOOL_REF_READ,
+        _TOOL_BIBLIOGRAPHY,
         _TOOL_FIND_IN_DOC,
         # Baca dokumen milik user (bukan dokumen aktif) — konteks tambahan.
         {
@@ -411,12 +571,33 @@ _SYSTEM_PROMPT = (
     "- Tulis dalam Bahasa Indonesia akademik. Isi tool `doc_insert`/`doc_replace` "
     "berupa MARKDOWN (judul `##`, tebal `**`, daftar `-`). BUKAN LaTeX.\n"
     "- DILARANG mengarang fakta, angka, DOI, atau referensi. Untuk data yang belum "
-    "diberikan pengguna, tulis penanda `[BUTUH DATA: ...]`; untuk klaim yang butuh "
-    "rujukan, tulis `[SITASI: ...]` — JANGAN mengarang nomor sitasi atau nama "
-    "penulis. Untuk sitasi hidup, hanya pakai sumber yang diverifikasi lewat riset; "
-    "bila ragu, jangan menyisipkan sitasi dan sebutkan itu di ringkasan.\n"
+    "diberikan pengguna, tulis penanda `[BUTUH DATA: ...]`.\n"
     "- Rapikan hanya yang perlu; jangan menghapus isi pengguna tanpa alasan.\n"
-    "- Efisien: jangan mengulang tool yang sama tanpa hasil baru."
+    "- Efisien: jangan mengulang tool yang sama tanpa hasil baru.\n\n"
+    "SITASI (WAJIB diikuti — ini yang mengisi Daftar Pustaka):\n"
+    "Laporan ini memakai sitasi bernomor gaya IEEE: `[1]`, `[2]`, dan seterusnya. "
+    "Nomornya TIDAK boleh kamu tentukan sendiri — SERVER yang menentukan.\n"
+    "1. Untuk klaim yang butuh rujukan, cari sumbernya dulu (`search_web` / "
+    "`arxiv_search`, perdalam dengan `fetch_webpage` bila perlu).\n"
+    "2. Panggil `cite_add` dengan metadata sumber itu (judul, penulis, tahun, DOI "
+    "bila ada). Server membalas nomornya, mis. `{\"sitasi\": \"[3]\"}`.\n"
+    "3. Tulis nomor ITU apa adanya di teks, tepat setelah klaimnya — mis. "
+    "\"...meningkatkan capaian belajar [3].\" JANGAN menulis nomor yang tidak "
+    "pernah dikembalikan `cite_add`, dan JANGAN menulis `[SITASI: ...]`.\n"
+    "4. Panggil `cite_list` lebih dulu bila ragu; sumber yang sudah ada "
+    "mengembalikan nomor lamanya, sehingga rujukan yang sama tetap satu nomor. "
+    "`cite_list` juga memperlihatkan jurnal yang SUDAH diunggah pengguna — "
+    "utamakan sumber itu, dan baca isinya dengan `ref_read` (boleh pakai nomor "
+    "sitasinya) sebelum menulis tinjauan pustaka, supaya isinya benar-benar "
+    "bersumber dari bacaan dan bukan dari ingatan.\n"
+    "5. Kalau sumber tepercaya tidak ditemukan, JANGAN mengarang: tulis kalimatnya "
+    "tanpa nomor sitasi dan sebutkan kekurangan itu di ringkasan akhir.\n"
+    "6. TUGAS TERAKHIR sebelum ringkasan, bila naskah memuat sitasi `[n]`: panggil "
+    "`cite_bibliography`, lalu sisipkan nilai `markdown` yang dikembalikannya APA "
+    "ADANYA lewat `doc_insert` tanpa `anchor_text`. Itulah DAFTAR PUSTAKA-nya — "
+    "jangan menyusunnya sendiri dan jangan mengarang entri.\n"
+    "Daftar Pustaka disusun dari nomor yang benar-benar kamu tulis, jadi nomor yang "
+    "tidak dipakai di teks tidak akan muncul di sana."
 )
 
 
@@ -430,8 +611,10 @@ async def run_agent_stream(
     user_id: uuid.UUID,
     mode: str = _DEFAULT_MODE,
     allow_web: bool = True,
-    max_tokens: int = 4000,
+    max_tokens: int | None = None,
+    context_window: int = 8000,
     selection_text: str | None = None,
+    extra_context: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Jalankan loop plan→execute→summarize; yield event NDJSON (dibungkus SSE
     di endpoint).
@@ -451,6 +634,11 @@ async def run_agent_stream(
     tools = _build_tools(mode_cfg, allow_web)
     shadow = _ShadowDoc(doc_context or "")
 
+    # Cadangan penalaran diberikan tanpa memeriksa daftar kemampuan — lihat
+    # catatan di _ANGGARAN_ISI.
+    if max_tokens is None:
+        max_tokens = _anggaran_awal(context_window)
+
     context_note = ""
     if doc_context:
         # Beri model potret ringkas dokumen (dipotong): cukup untuk merencanakan &
@@ -461,6 +649,8 @@ async def run_agent_stream(
         context_note = f"\n\nPOTRET DOKUMEN SAAT INI (ringkas):\n{snippet}"
     if selection_text:
         context_note += f"\n\nTEKS YANG SEDANG DISOROT PENGGUNA:\n{selection_text.strip()[:2000]}"
+    if extra_context:
+        context_note += f"\n\nKONTEKS TAMBAHAN DARI PENGGUNA (impor chat / lampiran):\n{extra_context.strip()[:6000]}"
 
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": _SYSTEM_PROMPT},
@@ -473,6 +663,9 @@ async def run_agent_stream(
     # Dibatasi agar tak jadi loop tak berujung pada model yang keras kepala.
     continue_nudges = 0
     MAX_CONTINUE_NUDGES = 6
+    # Anggaran hanya dinaikkan SEKALI per run: kalau anggaran tiga kali lipat
+    # masih habis untuk berpikir, menaikkan lagi cuma memperlama kegagalan.
+    budget_escalated = False
     cumulative_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
     max_iterations = mode_cfg["max_iterations"]
@@ -599,6 +792,56 @@ async def run_agent_stream(
         messages.append(assistant_msg)
 
         if not tool_calls:
+            # Anggaran habis untuk berpikir: giliran berakhir karena batas token
+            # (`length`) tanpa satu aksara jawaban maupun tool call, padahal ada
+            # jejak penalaran. Terukur pada model aktif proyek ini — dulu run
+            # berakhir hanya dengan event ['reasoning','end'], sehingga panel
+            # agentic tampak "tidak terjadi apa-apa" tanpa pesan apa pun.
+            # Ditangani seperti agentic_writer.ask(): naikkan anggaran, coba
+            # ulang sekali; kalau tetap kosong, LAPORKAN — jangan mati diam-diam.
+            if (
+                finish_reason == "length"
+                and not content_buffer
+                and reasoning_buffer
+                and not force_answer
+            ):
+                # Giliran ini tidak menghasilkan apa pun; jangan tinggalkan pesan
+                # asisten kosong di riwayat.
+                messages.pop()
+                if not budget_escalated:
+                    naik = _anggaran_naik(max_tokens, context_window)
+                    if naik > max_tokens:
+                        logger.info(
+                            "agent_run: anggaran %s token habis untuk penalaran "
+                            "(%s aksara) pada %s; diulang dengan %s token.",
+                            max_tokens, len(reasoning_buffer), model_name, naik,
+                        )
+                        max_tokens = naik
+                        budget_escalated = True
+                        continue
+                yield json.dumps({
+                    "event": "error",
+                    "data": (
+                        # Pesan dibedakan seperti pada kegagalan koneksi di atas:
+                        # menyebut "tanpa rencana" padahal sebagian bab sudah
+                        # ditulis akan menyesatkan.
+                        (
+                            "Model menghabiskan seluruh anggaran token untuk "
+                            "penalaran tanpa menghasilkan rencana kerja. Coba mode "
+                            "'cepat', perpendek instruksi, atau pilih model yang "
+                            "bukan model penalaran di Pengaturan."
+                        )
+                        if not plan_submitted
+                        else (
+                            "Anggaran token habis untuk penalaran di tengah "
+                            "pekerjaan; sebagian sudah ditulis ke dokumen. Klik "
+                            "Kerjakan lagi untuk melanjutkan bagian yang belum "
+                            "selesai, atau coba mode 'cepat'."
+                        )
+                    ),
+                }) + "\n"
+                break
+
             # Model berhenti memanggil tool. Kalau rencana BELUM tuntas (masih ada
             # tugas pending/running) dan kita belum di iterasi paksa-jawab, ini
             # berhenti prematur — dorong lanjut, jangan biarkan mati di tengah.
@@ -621,11 +864,54 @@ async def run_agent_stream(
                     ),
                 })
                 continue
+
+            # Rencana belum pernah dibuat, tapi model sudah menulis prosa —
+            # biasanya balik bertanya "dokumen mana?" padahal isi dokumen SUDAH
+            # ada di konteks. Terukur pada model aktif proyek ini: model memanggil
+            # `read_document` dengan argumen asal, gagal, lalu bertanya; prosanya
+            # dulu dipancarkan sebagai Ringkasan dan run berhenti tanpa satu baris
+            # ditulis — dari sisi pengguna "tidak terjadi apa-apa". Gateway juga
+            # tidak selalu menghormati tool_choice "required", jadi paksaan di
+            # tingkat API tidak bisa diandalkan; dorong lewat pesan.
+            if (
+                not plan_submitted
+                and not force_answer
+                and continue_nudges < MAX_CONTINUE_NUDGES
+            ):
+                continue_nudges += 1
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        "JANGAN bertanya dan JANGAN menjawab dengan prosa. Isi "
+                        "dokumen yang disunting SUDAH diberikan di konteks pesan "
+                        "pertama — kamu tidak perlu memanggil `read_document` dan "
+                        "tidak perlu nama berkas. Untuk memeriksa isinya pakai "
+                        "`find_in_document`. Sekarang panggil `submit_plan` dengan "
+                        "daftar tugas konkret, lalu kerjakan tugasnya dengan "
+                        "`doc_insert`/`doc_replace`. Kalau instruksinya kurang "
+                        "detail, ambil asumsi yang wajar dan tuliskan asumsi itu "
+                        "di ringkasan akhir."
+                    ),
+                })
+                continue
+
             # Giliran final (rencana tuntas / paksa-jawab): baru sekarang prosa model
             # dipancarkan sebagai RINGKASAN — sekali, utuh. Ditahan sampai di sini
             # supaya prosa "berhenti prematur" yang didorong-lanjut tak ikut bocor.
             if content_buffer:
                 yield json.dumps({"event": "text", "data": content_buffer}) + "\n"
+            elif not plan_submitted:
+                # Tak ada rencana, tak ada tool, tak ada prosa — pengguna berhak
+                # tahu kenapa panel kosong.
+                yield json.dumps({
+                    "event": "error",
+                    "data": (
+                        "Model tidak menghasilkan rencana kerja maupun jawaban "
+                        f"(alasan berhenti: {finish_reason or 'tidak diketahui'}). "
+                        "Model ini mungkin tidak mendukung tool calling; coba model "
+                        "lain di Pengaturan."
+                    ),
+                }) + "\n"
             break
 
         # Eksekusi tiap tool call.
@@ -633,12 +919,46 @@ async def run_agent_stream(
             tc_id = tc["id"]
             tc_name = tc["function"]["name"]
             tc_args_str = tc["function"]["arguments"] or "{}"
+            args_rusak = False
             try:
                 tc_args = json.loads(tc_args_str)
             except Exception:
+                # Argumen tool terpotong (umumnya finish_reason="length" pada
+                # doc_insert berisi satu bab). Dulu ini diam-diam menjadi {},
+                # lalu doc_insert melaporkan "Menyisipkan 0 karakter" sebagai
+                # SUKSES — model menandai tugasnya 'done' dan lanjut, padahal
+                # dokumen tak berubah. Sekarang dilaporkan gagal ke model dan UI.
                 tc_args = {}
+                args_rusak = True
 
             is_fe = tc_name in _FE_TOOLS
+
+            # Tool tulis DITOLAK sebelum rencana disubmit. `tool_choice="required"`
+            # memaksa model memanggil tool, tapi tidak bisa memaksa tool yang MANA:
+            # model aktif proyek ini terukur langsung memanggil `doc_insert` dua kali
+            # (isi identik, 885 aksara) sebelum `submit_plan`, lalu sekali lagi
+            # sesudahnya — `find_in_document` menemukan 3 kecocokan, artinya paragraf
+            # yang sama masuk tiga kali ke dokumen pengguna. Aturan "submit_plan
+            # lebih dulu" sudah ada di prompt sistem tapi tidak pernah ditegakkan,
+            # dan tool tulis dieksekusi frontend (fe=true) sehingga tulisan liar itu
+            # benar-benar mengubah dokumen. Penolakan di sini membuat model
+            # merencanakan dulu tanpa merusak apa pun.
+            if is_fe and not plan_submitted:
+                logger.info(
+                    "agent_run: %s ditolak — rencana belum disubmit.", tc_name
+                )
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc_id,
+                    "content": json.dumps({
+                        "status": "rejected",
+                        "reason": (
+                            "Belum ada rencana. Panggil submit_plan lebih dulu, baru "
+                            "menulis. Tidak ada perubahan yang diterapkan ke dokumen."
+                        ),
+                    }),
+                })
+                continue
 
             # Umumkan pemanggilan tool (kontrol tidak perlu, ditangani khusus).
             if tc_name not in _CONTROL_TOOLS:
@@ -646,6 +966,34 @@ async def run_agent_stream(
                     "event": "tool_call",
                     "data": {"id": tc_id, "name": tc_name, "args": tc_args, "fe": is_fe},
                 }) + "\n"
+
+            if args_rusak:
+                logger.warning(
+                    "agent_run: argumen tool '%s' terpotong (%s aksara, finish_reason=%s)",
+                    tc_name, len(tc_args_str), finish_reason,
+                )
+                yield json.dumps({
+                    "event": "tool_result",
+                    "data": {
+                        "id": tc_id,
+                        "name": tc_name,
+                        "ok": False,
+                        "summary": "Argumen tool terpotong — isi tidak ditulis.",
+                    },
+                }) + "\n"
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc_id,
+                    "content": json.dumps({
+                        "status": "error",
+                        "reason": (
+                            "Argumen terpotong karena batas token; TIDAK ada yang "
+                            "ditulis. Panggil ulang tool ini dengan isi yang jauh "
+                            "lebih pendek (satu sub-bagian saja)."
+                        ),
+                    }),
+                })
+                continue
 
             result_payload, tool_result_str = await _dispatch_tool(
                 tc_name, tc_args, shadow, db, user_id, plan_tasks,
@@ -705,6 +1053,15 @@ async def _dispatch_tool(
 
         if name == "doc_insert":
             md = str(args.get("markdown", ""))
+            if not md.strip():
+                # Sisipan kosong tak pernah berguna, dan melaporkannya sebagai
+                # sukses ("Menyisipkan 0 karakter") membuat model yakin tugasnya
+                # selesai padahal dokumen tak berubah.
+                return ({"ok": False, "summary": "Tidak ada isi untuk disisipkan."},
+                        json.dumps({
+                            "status": "error",
+                            "reason": "Argumen 'markdown' kosong — kirim isi yang mau ditulis.",
+                        }))
             anchor = args.get("anchor_text") or None
             placement = str(args.get("placement", "after"))
             shadow.insert(md, anchor, placement)
@@ -744,6 +1101,61 @@ async def _dispatch_tool(
             return ({"ok": True, "summary": f"{len(hits)} kecocokan untuk '{query[:40]}'."},
                     json.dumps({"matches": hits}))
 
+        if name == "cite_add":
+            # Nomor sitasi ditentukan SERVER lalu dikembalikan ke model; itu yang
+            # membuat `[n]` sah dan Daftar Pustaka bisa terisi otomatis.
+            out = await cite_add(db, user_id, **args)
+            data = json.loads(out)
+            return (
+                {"ok": True, "summary": f"Sumber \"{data.get('title', '')[:44]}\" → {data.get('sitasi', '')}"},
+                out,
+            )
+
+        if name == "cite_list":
+            out = await cite_list(db, user_id)
+            data = json.loads(out)
+            return ({"ok": True, "summary": f"{data.get('jumlah', 0)} sumber di perpustakaan."}, out)
+
+        if name == "ref_read":
+            out = await ref_read(db, user_id, **args)
+            data = json.loads(out)
+            if data.get("error"):
+                return ({"ok": False, "summary": str(data["error"])[:80]}, out)
+            return (
+                {"ok": True, "summary": f"Membaca sumber {data.get('sitasi', '')} ({data.get('sumber', '')})."},
+                out,
+            )
+
+        if name == "cite_bibliography":
+            # Naskah dipindai dari buffer bayangan, bukan dari klaim model: nomor
+            # yang masuk Daftar Pustaka harus yang benar-benar tertulis.
+            md, dipakai, asing = await bibliografi_markdown(db, user_id, shadow.to_text())
+            if not dipakai:
+                return (
+                    {"ok": False, "summary": "Belum ada sitasi [n] yang sah di naskah."},
+                    json.dumps({
+                        "status": "kosong",
+                        "nomor_tak_dikenal": asing,
+                        "pesan": (
+                            "Tidak ada sitasi [n] yang cocok dengan perpustakaan. Simpan "
+                            "sumber lewat cite_add lalu tulis nomor yang dikembalikannya."
+                        ),
+                    }, ensure_ascii=False),
+                )
+            return (
+                {"ok": True, "summary": f"Daftar Pustaka siap: {len(dipakai)} entri {dipakai}."},
+                json.dumps({
+                    "status": "siap",
+                    "nomor_dipakai": dipakai,
+                    "nomor_tak_dikenal": asing,
+                    "markdown": md,
+                    "pesan": (
+                        "Sisipkan nilai 'markdown' APA ADANYA lewat doc_insert tanpa "
+                        "anchor_text (akhir dokumen). Jangan diubah atau disusun ulang."
+                    ),
+                }, ensure_ascii=False),
+            )
+
         if name == "read_document":
             out = await read_document(db, user_id, **args)
             return ({"ok": True, "summary": "Membaca dokumen referensi."}, out)
@@ -768,6 +1180,13 @@ async def _dispatch_tool(
 
         return ({"ok": False, "summary": f"Tool tak dikenal: {name}"},
                 json.dumps({"error": f"Unknown tool: {name}"}))
+    except SitasiError as e:
+        # Metadata sumber tak lengkap: ini penolakan yang bisa diperbaiki model
+        # (cari sumbernya dulu), bukan galat sistem. Dibedakan dari Exception
+        # generik supaya pesannya memandu, bukan sekadar "Tool gagal".
+        logger.info("agent_run cite ditolak: %s", e)
+        return ({"ok": False, "summary": f"Sitasi ditolak: {e}"},
+                json.dumps({"status": "rejected", "reason": str(e)}))
     except Exception as e:  # noqa: BLE001
         logger.exception(f"agent_run tool '{name}' gagal")
         return ({"ok": False, "summary": f"Tool {name} gagal: {e}"},

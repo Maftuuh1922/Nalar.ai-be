@@ -29,10 +29,57 @@ from app.services.citation_formatter import (
     generate_citation,
 )
 from app.services.model_selection import ResolvedLLM
+from app.services.academic_reference_search import search_academic_references
 
 logger = logging.getLogger(__name__)
 
 _MAX_REFERENCE_CHARS = 6000
+
+
+async def _deep_search_references(
+    db: AsyncSession,
+    user: User,
+    group_id: uuid.UUID,
+    instruction: str,
+    rag_context: str = "",
+    limit: int = 6,
+) -> list[JournalReference]:
+    """Cari sumber akademik nyata ketika koleksi lokal belum memadai.
+
+    Metadata berasal dari Crossref/OpenAlex dan DOI sudah diverifikasi oleh
+    ``search_academic_references``. Sumber dimasukkan ke grup aktif sehingga
+    nomor sitasi tetap konsisten dengan laporan tersebut.
+    """
+    # Teks dokumen mentah sering terlalu panjang/noisy untuk mesin indeks.
+    # Instruksi user menjadi query utama; konteks hanya menjadi pengaya singkat.
+    query = " ".join((instruction, rag_context[:600])).strip()[:1200]
+    found = await search_academic_references(query, limit=limit)
+    for item in found:
+        title = str(item.get("title") or "").strip()
+        authors = item.get("authors") or []
+        if not title or not authors:
+            continue
+        exists = await db.scalar(select(JournalReference).where(
+            JournalReference.group_id == group_id,
+            JournalReference.user_id == user.id,
+            JournalReference.title == title,
+        ))
+        if exists:
+            continue
+        db.add(JournalReference(
+            user_id=user.id, group_id=group_id,
+            filename=item.get("url") or "(sumber akademik daring)",
+            file_path=item.get("url") or "(sumber akademik daring)",
+            title=title, authors=authors, year=item.get("year"),
+            journal_name=item.get("venue") or "", pages=item.get("pages"),
+            doi=item.get("doi"), status="extracted",
+        ))
+    if found:
+        await db.commit()
+    return list((await db.scalars(select(JournalReference).where(
+        JournalReference.group_id == group_id,
+        JournalReference.user_id == user.id,
+    ).order_by(JournalReference.created_at.asc()))).all())
 
 
 def _reference_block(references: list[JournalReference]) -> str:
@@ -263,8 +310,11 @@ async def agentic_write(
             )
         ).all()
     )
+    # Agentic fallback: lakukan deep search otomatis bila library kosong.
     if not references:
-        raise ValueError("Grup ini belum memiliki referensi jurnal. Upload jurnal dulu.")
+        references = await _deep_search_references(db, user, group_id, instruction, rag_context)
+    if not references:
+        raise ValueError("Referensi tidak ditemukan. Perluas topik atau tambahkan PDF/jurnal.")
 
     ref_block = _reference_block(references)
     context = rag_context[:_MAX_REFERENCE_CHARS] if rag_context else ""
@@ -330,7 +380,9 @@ async def agentic_write_stream(
         ).all()
     )
     if not references:
-        raise ValueError("Grup ini belum memiliki referensi jurnal. Upload jurnal dulu.")
+        references = await _deep_search_references(db, user, group_id, instruction, rag_context)
+    if not references:
+        raise ValueError("Referensi tidak ditemukan. Perluas topik atau tambahkan PDF/jurnal.")
 
     ref_block = _reference_block(references)
     context = rag_context[:_MAX_REFERENCE_CHARS] if rag_context else ""

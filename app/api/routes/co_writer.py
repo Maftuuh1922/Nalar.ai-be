@@ -62,6 +62,7 @@ from app.schemas.co_writer import (
 )
 from app.services.agentic_writer import agentic_write
 from app.services.agent_run import run_agent_stream
+from app.services.citation_tools import referensi_urut
 from app.services.academic_reference_search import search_academic_references
 from app.services.latex_export import (
     compile_latex_pdf,
@@ -640,13 +641,9 @@ async def _docx_file_dari_markdown(
     )
     from starlette.concurrency import run_in_threadpool
 
-    refs = (
-        await db.scalars(
-            select(JournalReference).where(JournalReference.user_id == user.id)
-        )
-    ).all()
+    # Penomoran [n] memakai satu sumber kebenaran bersama tool `cite_add` agen.
     references: dict[int, str] = {}
-    ordered = sorted(refs, key=lambda r: r.created_at)
+    ordered = await referensi_urut(db, user.id)
     for i, ref in enumerate(ordered, start=1):
         doi = (ref.doi or "").strip()
         if doi:
@@ -1378,7 +1375,7 @@ async def get_onlyoffice_config(
     import hashlib
 
     doc_key = hashlib.sha256(f"{doc_id}-{version}".encode()).hexdigest()[:40]
-    public_backend = "http://host.docker.internal:8089"
+    public_backend = settings.backend_base_url_from_docker
     api_path = f"{settings.API_PREFIX}/co_writer"
     return {
         "documentServerUrl": "http://localhost:8090",
@@ -2414,6 +2411,7 @@ async def agent_run_stream_endpoint(
         raise HTTPException(status_code=422, detail="Instruksi kosong.")
     mode = str(payload.get("mode") or "seimbang")
     selection_text = payload.get("selection_text") or None
+    extra_context = payload.get("extra_context") or None
 
     doc = await _get_owned_doc(db, doc_id, current_user)
     llm = await _resolve_llm(db, current_user.id, payload.get("model"))
@@ -2451,7 +2449,9 @@ async def agent_run_stream_endpoint(
                 user_id=current_user.id,
                 mode=mode,
                 allow_web=allow_web,
+                context_window=llm.context_window,
                 selection_text=selection_text,
+                extra_context=extra_context,
             ):
                 try:
                     evt = json.loads(line)
@@ -2681,15 +2681,10 @@ async def regenerate_bibliography(
 
     from app.services.citation_formatter import generate_citation
 
-    # Ambil semua referensi user urut created_at (urutan [n])
-    from app.models.journal import JournalReference
-
-    refs = (
-        await db.scalars(
-            select(JournalReference).where(JournalReference.user_id == current_user.id)
-        )
-    ).all()
-    ordered = sorted(refs, key=lambda r: r.created_at)
+    # Ambil semua referensi user dalam urutan penomoran [n] — satu sumber
+    # kebenaran bersama tool `cite_add` agen, supaya nomor yang dijanjikan ke
+    # agen merujuk entri Daftar Pustaka yang sama.
+    ordered = await referensi_urut(db, current_user.id)
 
     # Scan sitasi [n] yang dipakai di isi dokumen. Dipindai dari naskah yang
     # sudah didatarkan supaya sitasi di dalam berkas bab ikut terhitung; daftar
@@ -3795,15 +3790,9 @@ async def export_document(
 
     doc = await _get_owned_doc(db, doc_id, current_user)
 
-    # DOI mapping untuk sitasi aktif di DOCX
-    from app.models.journal import JournalReference
-
-    refs = (
-        await db.scalars(
-            select(JournalReference).where(JournalReference.user_id == current_user.id)
-        )
-    ).all()
-    ordered = sorted(refs, key=lambda r: r.created_at)
+    # DOI mapping untuk sitasi aktif di DOCX — urutan [n] dari sumber kebenaran
+    # yang sama dengan tool `cite_add` agen.
+    ordered = await referensi_urut(db, current_user.id)
     references: dict[int, str] = {}
     for i, ref in enumerate(ordered, start=1):
         doi = (ref.doi or "").strip()
@@ -4189,7 +4178,7 @@ async def import_file_to_co_writer(
 
     images_dir = os.path.join("uploads", str(new_doc.id), "images")
     # Media diakses lewat route statis /uploads/ di backend yang sama
-    media_base = f"http://localhost:8089/uploads/{new_doc.id}/images"
+    media_base = f"{settings.backend_base_url}/uploads/{new_doc.id}/images"
 
     # Ekstraksi PDF/DOCX memakai analisis tata letak yang berat (beberapa detik
     # per halaman) dan sepenuhnya sinkron; dijalankan di threadpool supaya tidak
@@ -4238,33 +4227,15 @@ async def import_file_to_co_writer(
             # Refine P1: koreksi bold via font-flags PDF asli + spacing dot-leader
             await run_in_threadpool(post_process_converted_docx, docx_kerja, pdf_tmp)
 
-            # DOCX kerja (sudah valid) dijadikan sumber markdown via pandoc untuk
-            # konten editor (LaTeX). Pandoc ada di bin/ (folder proyek, bukan
-            # Nalar.ai-be/bin).
-            pandoc_bin = Path("bin/pandoc.exe")
-            if not pandoc_bin.exists():
-                pandoc_bin = Path("..") / "bin" / "pandoc.exe"
-            if not pandoc_bin.exists():
-                pandoc_bin = shutil.which("pandoc")
-            if pandoc_bin:
-                try:
-                    res_p = subprocess.run(
-                        [str(pandoc_bin), str(docx_kerja), "-t", "markdown"],
-                        capture_output=True,
-                        text=True,
-                        timeout=600,  # DOCX besar (6MB/79 tabel) butuh waktu lama
-                    )
-                    text = res_p.stdout if res_p.returncode == 0 else ""
-                except subprocess.TimeoutExpired:
-                    text = ""
-                except Exception:  # noqa: BLE001 — pandoc gagal bukan alasan impor gagal
-                    text = ""
-            if not text:
-                # fallback: ekstraksi teks lama (tetap memberi konten walaupun
-                # tanpa layout; DOCX kerja valid tetap dipakai editor)
-                text = await run_in_threadpool(
-                    pdf_to_markdown, contents, images_dir, media_base, str(new_doc.id)
-                )
+            # DOCX kerja (sudah valid) dijadikan sumber markdown via markitdown
+            # untuk konten editor (mode sumber). markitdown menghasilkan
+            # paragraf tersambung & tabel markdown yang jauh lebih rapi daripada
+            # pandoc/PyMuPDF manual; fallback ke pandoc bila tidak tersedia.
+            from app.services.doc_import import pdf_docx_to_markdown
+
+            text = await run_in_threadpool(
+                pdf_docx_to_markdown, docx_kerja, contents, images_dir, media_base, str(new_doc.id)
+            )
             # Deteksi PDF scan/image-only: konversi berhasil tapi tanpa teks
             # yang bisa dibaca — beri tahu user dengan jelas, bukan diam-diam
             # menyimpan dokumen kosong.
