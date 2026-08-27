@@ -649,6 +649,20 @@ async def _docx_file_dari_markdown(
         if doi:
             references[i] = doi if doi.startswith("http") else f"https://doi.org/{doi}"
 
+    # Rapatkan penomoran sitasi [1..N] urut kemunculan untuk keluaran ini, lalu
+    # petakan ulang tabel DOI ke nomor baru — keduanya HARUS berkunci nomor yang
+    # sama supaya hyperlink [n] menunjuk referensi yang benar. Pemanggil WAJIB
+    # mengirim markdown mentah (belum dirapatkan) agar pemetaan ini konsisten.
+    from app.services.citation_tools import naskah_ekspor_rapat
+
+    markdown, _peta_sitasi = await naskah_ekspor_rapat(db, user.id, markdown)
+    if _peta_sitasi:
+        references = {
+            _peta_sitasi[lama]: doi
+            for lama, doi in references.items()
+            if lama in _peta_sitasi
+        }
+
     safe_title = _re.sub(r'[\\/:*?"<>|]', "_", title or "Draf").strip()[:80] or "Draf"
     output_path = os.path.join(
         tempfile.gettempdir(),
@@ -682,9 +696,17 @@ async def _file_pdf_dari_markdown(
     safe_title = re.sub(r'[\\/:*?"<>|]', "_", title or "Draf").strip()[:80] or "Draf"
     tmpdir = tempfile.mkdtemp()
     output_path = os.path.join(tmpdir, f"{fname}.pdf")
+
+    # Jalur PDF (pandoc/typeset) tak memakai tabel DOI — cukup rapatkan teksnya
+    # agar sitasi keluar [1..N] urut kemunculan, bukan mulai dari tengah ([13]).
+    # Fallback DOCX di bawah TETAP menerima `markdown` mentah karena
+    # `_docx_file_dari_markdown` merapatkan + memetakan DOI-nya sendiri.
+    from app.services.citation_tools import naskah_ekspor_rapat
+
+    md_rapat, _ = await naskah_ekspor_rapat(db, user.id, markdown)
     try:
         pdf_path = pandoc_latex.pandoc_to_pdf(
-            markdown,
+            md_rapat,
             output_path,
             asset_dirs=[images_dir] if images_dir else [],
             jobname=fname,
@@ -725,7 +747,7 @@ async def _file_pdf_dari_markdown(
         try:
             from app.services.typeset import typeset_to_pdf
 
-            await run_in_threadpool(typeset_to_pdf, markdown, output_path)
+            await run_in_threadpool(typeset_to_pdf, md_rapat, output_path)
         except Exception as exc3:  # noqa: BLE001
             logger.error(
                 "Fallback HTML-to-PDF gagal untuk %s: %s",
@@ -2278,7 +2300,7 @@ async def stream_edit_selection(
 
 
 # --------------------------------------------------------------------------- #
-# Agentic write & integrasi Learning Space
+# Agentic write & integrasi Ruang Riset
 # --------------------------------------------------------------------------- #
 
 
@@ -2345,7 +2367,7 @@ async def agentic_write_stream_endpoint(
 
     async def event_stream():
         try:
-            yield _sse("stage", {"stage": "reading", "label": "Membaca jurnal dari Learning Spaceâ€¦"})
+            yield _sse("stage", {"stage": "reading", "label": "Membaca jurnal dari Ruang Riset…"})
             async for event in agentic_write_stream(
                 db,
                 current_user,
@@ -2392,6 +2414,19 @@ async def agent_run_stream_endpoint(
                                     kosong dipakai sumber proyek di server)
         selection_text: str         teks yang sedang disorot pengguna (opsional)
         model: {...}                pilihan model (opsional)
+        phase: "propose"|"execute"  fase alur "rencana → setujui → kerjakan".
+                                    propose = usul rencana + brainstorm lalu
+                                    berhenti (dokumen tak disentuh); execute =
+                                    kerjakan rencana yang disetujui. Default
+                                    "execute" (kompatibel pemanggil lama).
+        tasks: [str]                judul tugas yang disetujui pengguna; dipakai
+                                    saat phase="execute" agar planning dilewati.
+        template_context: str       template/contoh dari pengguna (slot khusus)
+                                    yang WAJIB diikuti agent: struktur, urutan &
+                                    penomoran bab, gaya. Opsional.
+        session_memory: str         ringkasan run sebelumnya di dokumen ini
+                                    (kontinuitas "lanjutkan setelah gagal";
+                                    dibangun FE dari riwayat lokal). Opsional.
 
     Event SSE (name → data):
         plan {tasks:[{index,title,status}]}
@@ -2412,6 +2447,26 @@ async def agent_run_stream_endpoint(
     mode = str(payload.get("mode") or "seimbang")
     selection_text = payload.get("selection_text") or None
     extra_context = payload.get("extra_context") or None
+
+    # Fase alur "rencana → setujui → kerjakan" (lihat docstring). Default
+    # "execute" + tasks=None menjaga perilaku lama untuk pemanggil yang belum
+    # mengirim `phase`.
+    phase = str(payload.get("phase") or "execute").strip().lower()
+    if phase not in ("propose", "execute"):
+        phase = "execute"
+    approved_tasks = payload.get("tasks")
+    if isinstance(approved_tasks, list):
+        approved_tasks = [str(t).strip() for t in approved_tasks if str(t).strip()]
+        approved_tasks = approved_tasks or None
+    else:
+        approved_tasks = None
+
+    # Slot Template khusus (panel co-writer) = kerangka WAJIB diikuti agent.
+    # Memori sesi = ringkasan run sebelumnya di dokumen ini (dibangun FE dari
+    # riwayat lokal per-dokumen) untuk kontinuitas "lanjutkan setelah gagal".
+    # Keduanya opsional & di-inject sebagai teks konteks (desain tetap stateless).
+    template_context = payload.get("template_context") or None
+    session_memory = payload.get("session_memory") or None
 
     doc = await _get_owned_doc(db, doc_id, current_user)
     llm = await _resolve_llm(db, current_user.id, payload.get("model"))
@@ -2452,6 +2507,10 @@ async def agent_run_stream_endpoint(
                 context_window=llm.context_window,
                 selection_text=selection_text,
                 extra_context=extra_context,
+                phase=phase,
+                approved_tasks=approved_tasks,
+                template_context=template_context,
+                session_memory=session_memory,
             ):
                 try:
                     evt = json.loads(line)
@@ -2670,7 +2729,14 @@ async def regenerate_bibliography(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Generate ulang Daftar Pustaka dari seluruh sitasi [n] di dokumen.
+    """Generate ulang Daftar Pustaka + rapatkan penomoran sitasi dokumen ini.
+
+    Penomoran `[n]` dari `cite_add` bersifat global per-pengguna (append-only
+    lintas dokumen), jadi laporan mandiri bisa mulai dari tengah (mis. `[13]`).
+    Endpoint ini merapatkan penomoran KHUSUS dokumen: menulis ulang `[n]` di
+    teks menjadi [1..N] menurut urutan kemunculan (gaya IEEE) DAN membangun
+    Daftar Pustaka bernomor sama — keduanya dijaga sinkron, lalu disimpan
+    sebagai isi dokumen (dengan checkpoint pemulihan).
 
     Body opsional: {"format": "ieee"} untuk memilih format (default ieee).
     """
@@ -2679,52 +2745,49 @@ async def regenerate_bibliography(
     if payload and payload.get("format"):
         format_name = str(payload["format"])
 
-    from app.services.citation_formatter import generate_citation
+    from app.services.citation_formatter import (
+        citation_meta_from_reference,
+        generate_citation,
+    )
+    from app.services.citation_tools import (
+        _peta_kemunculan,
+        _tulis_ulang_nomor,
+        compact_citations_and_bibliography,
+    )
 
     # Ambil semua referensi user dalam urutan penomoran [n] — satu sumber
     # kebenaran bersama tool `cite_add` agen, supaya nomor yang dijanjikan ke
     # agen merujuk entri Daftar Pustaka yang sama.
     ordered = await referensi_urut(db, current_user.id)
 
-    # Scan sitasi [n] yang dipakai di isi dokumen. Dipindai dari naskah yang
-    # sudah didatarkan supaya sitasi di dalam berkas bab ikut terhitung; daftar
-    # pustakanya sendiri tetap ditulis ke main.tex.
-    naskah = await _sumber_tex_proyek(db, doc)
-    used = sorted({int(m) for m in re.findall(r"\[(\d+)\]", naskah)})
-    used = [n for n in used if 1 <= n <= len(ordered)]
-
-    entries: list[str] = []
-    for n in used:
-        ref = ordered[n - 1]
-        meta = {
-            "title": ref.title,
-            "authors": ref.authors or [],
-            "year": ref.year,
-            "journal_name": ref.journal_name,
-            "volume": ref.volume,
-            "issue": ref.issue,
-            "pages": ref.pages,
-            "doi": ref.doi,
-            "publisher": ref.publisher,
-        }
-        entries.append(f"[{n}] {generate_citation(meta, format_name)}")
-
-    # Bangun ulang bagian Daftar Pustaka di main.tex. Draf lama Markdown tetap
-    # memakai heading Markdown; proyek normal harus menerima source LaTeX sah.
+    # Penomoran `[n]` dari `cite_add` bersifat global per-pengguna (append-only
+    # lintas dokumen), jadi laporan mandiri bisa mulai dari tengah (mis. `[13]`).
+    # Di sini penomoran DIRAPATKAN khusus dokumen ini: `[n]` di teks ditulis
+    # ulang [1..N] menurut urutan kemunculan (gaya IEEE) dan Daftar Pustaka
+    # dibangun seiras — keduanya dijaga sinkron.
     content = doc.content or ""
+
     if doc.content_format == "latex":
-        content, bib_section = _perbarui_bibliografi_latex(content, entries)
-    else:
-        bib_section = (
-            "## Daftar Pustaka\n\n" + "\n\n".join(entries)
-            if entries
-            else "## Daftar Pustaka\n\n_Belum ada sitasi di dokumen._"
+        # LaTeX: rapatkan [n] di badan (blok bibliografi lama dibuang saat
+        # dihitung agar labelnya tak mengacaukan urutan), tulis ulang di seluruh
+        # sumber, lalu bangun ulang blok bibliografi berurutan baru.
+        badan = _LEGACY_LATEX_BIBLIOGRAPHY_RE.sub(
+            "", _BIBLIOGRAPHY_BLOCK_RE.sub("", content)
         )
-        pattern = re.compile(r"##\s*Daftar Pustaka.*$", re.DOTALL | re.MULTILINE)
-        if pattern.search(content):
-            content = pattern.sub("", content).rstrip() + "\n\n" + bib_section
-        else:
-            content = content.rstrip() + "\n\n" + bib_section
+        peta = _peta_kemunculan(badan, len(ordered))
+        content = _tulis_ulang_nomor(content, peta)
+        entries = [
+            f"[{baru}] {generate_citation(citation_meta_from_reference(ordered[lama - 1]), format_name)}"
+            for lama, baru in sorted(peta.items(), key=lambda kv: kv[1])
+        ]
+        content, bib_section = _perbarui_bibliografi_latex(content, entries)
+        used = sorted(peta.values())
+    else:
+        badan_baru, bib_md, used, asing, _peta = await compact_citations_and_bibliography(
+            db, current_user.id, content, format_name=format_name
+        )
+        bib_section = bib_md or "## DAFTAR PUSTAKA\n\n_Belum ada sitasi di dokumen._"
+        content = badan_baru.rstrip() + "\n\n" + bib_section
 
     if content != doc.content:
         await simpan_checkpoint(db, doc, current_user, "Sebelum regenerasi daftar pustaka")
@@ -2732,6 +2795,52 @@ async def regenerate_bibliography(
     await db.commit()
     await db.refresh(doc)
     return {"bibliography": bib_section, "content": doc.content, "citation_count": len(used)}
+
+
+@router.get("/citation-coverage")
+async def citation_coverage(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Cakupan sitasi: referensi mana yang BENAR-BENAR dirujuk `[n]` di draf.
+
+    Beda dari "sitasi tersimpan di pustaka" (`SavedCitation`): endpoint ini
+    memindai penanda `[n]` pada naskah setiap draf lalu memetakannya ke referensi
+    lewat `referensi_urut` — urutan penomoran yang sama dipakai `cite_add` agen
+    dan `regenerate-bibliography`. Dipakai untuk analisis gap: sumber yang sudah
+    dikumpulkan tapi belum sekali pun dipakai menulis.
+    """
+    ordered = await referensi_urut(db, current_user.id)
+    docs = (
+        await db.scalars(
+            select(CoWriterDocument).where(CoWriterDocument.user_id == current_user.id)
+        )
+    ).all()
+
+    cited_ids: set[str] = set()
+    per_document: list[dict] = []
+    for doc in docs:
+        # Naskah didatarkan supaya sitasi di berkas bab (`\input`) ikut terhitung,
+        # persis seperti regenerate-bibliography.
+        naskah = await _sumber_tex_proyek(db, doc)
+        used = {int(m) for m in re.findall(r"\[(\d+)\]", naskah)}
+        used = {n for n in used if 1 <= n <= len(ordered)}
+        if not used:
+            continue
+        for n in used:
+            cited_ids.add(str(ordered[n - 1].id))
+        per_document.append(
+            {"doc_id": str(doc.id), "title": doc.title, "citation_count": len(used)}
+        )
+
+    total = len(ordered)
+    return {
+        "total_references": total,
+        "cited_count": len(cited_ids),
+        "uncited_count": max(0, total - len(cited_ids)),
+        "cited_reference_ids": sorted(cited_ids),
+        "per_document": per_document,
+    }
 
 
 @router.get("/documents/{doc_id}/export-latex")
@@ -2769,8 +2878,13 @@ async def export_latex(
 
         tmpdir = tempfile.mkdtemp()
         output_path = os.path.join(tmpdir, f"{fname}.pdf")
+        # Rapatkan penomoran sitasi [1..N] urut kemunculan untuk PDF ini
+        # (penyimpanan tak diubah); tanpa ini dapus bisa mulai dari [13].
+        from app.services.citation_tools import naskah_ekspor_rapat
+
+        isi_pdf, _ = await naskah_ekspor_rapat(db, current_user.id, doc.content or "")
         try:
-            await run_in_threadpool(typeset_to_pdf, doc.content or "", output_path)
+            await run_in_threadpool(typeset_to_pdf, isi_pdf, output_path)
         except Exception as exc:  # noqa: BLE001
             logger.error("Typeset PDF gagal untuk %s: %s", doc.id, exc, exc_info=True)
             raise HTTPException(status_code=500, detail=f"Gagal membuat PDF: {exc}")
@@ -3812,6 +3926,20 @@ async def export_document(
             )
         )
 
+    # Rapatkan penomoran sitasi [1..N] menurut urutan kemunculan KHUSUS untuk
+    # keluaran ini — penyimpanan tak diubah, tapi PDF/DOCX tak lagi mulai dari
+    # tengah (mis. [13]) hanya karena perpustakaan memuat referensi laporan
+    # lain. `references` (DOI) berkunci nomor global, jadi ikut dipetakan ulang.
+    from app.services.citation_tools import naskah_ekspor_rapat
+
+    isi, _peta_sitasi = await naskah_ekspor_rapat(db, current_user.id, isi)
+    if _peta_sitasi:
+        references = {
+            _peta_sitasi[lama]: doi
+            for lama, doi in references.items()
+            if lama in _peta_sitasi
+        }
+
     safe_title = _re.sub(r'[\\/:*?"<>|]', "_", doc.title or "Draf").strip()[:80] or "Draf"
     fname = f"{safe_title.replace(' ', '_')}_{uuid.uuid4().hex[:6]}"
 
@@ -3954,7 +4082,7 @@ async def learning_space_data(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> LearningSpaceData:
-    """Data Learning Space yang bisa ditarik Co-Writer tanpa upload ulang:
+    """Data Ruang Riset yang bisa ditarik Co-Writer tanpa upload ulang:
     grup laporan, referensi, sitasi tersimpan, histori chat, dan draf.
     """
     from app.models.chat_history import ChatHistory

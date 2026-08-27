@@ -6,7 +6,7 @@ pesan Indonesia, background task untuk ekstraksi metadata.
 Sub-router:
 - /journal/groups          — CRUD grup laporan ("Laporan A/B/C")
 - /journal/references      — upload PDF, edit metadata, generate sitasi
-- /journal/citation-categories — CRUD kategori sitasi (Learning Space)
+- /journal/citation-categories — CRUD kategori sitasi
 - /journal/citations       — sitasi tersimpan per kategori
 """
 
@@ -519,7 +519,7 @@ async def search_journals(
     return results[: payload.max_results * 2]
 
 
-# ── Kategori sitasi (Learning Space) ─────────────────────────────────────────
+# ── Kategori sitasi ─────────────────────────────────────────
 
 
 @router.get("/citation-categories", response_model=list[CitationCategoryResponse])

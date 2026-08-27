@@ -92,7 +92,7 @@ class BibliographyResponse(BaseModel):
     bibliography: str
 
 
-# ── Sitasi tersimpan (Learning Space) ────────────────────────────────────────
+# ── Sitasi tersimpan ────────────────────────────────────────
 
 
 class CitationCategoryCreate(BaseModel):

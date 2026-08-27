@@ -1,6 +1,37 @@
+# Python bytecode & cache
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+dist/
+build/
+eggs/
+pip-wheel-metadata/
+*.manifest
+*.spec
+
+# Virtual env
+.venv/
+venv/
+env/
+ENV/
+.venv*/
+venv*/
+.hermes/
+
+# Environment — jangan commit secret!
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+cookies.txt
+.ss_token
+nul
 
 # Basis data lokal. Baris lama menulis `nalar.db`, padahal berkas yang dipakai
 # bernama `nalar_ai.db` — akibatnya data pengguna (termasuk kunci API terenkripsi)
@@ -8,23 +39,60 @@ __pycache__/
 *.db
 *.db-journal
 *.db.bak-*
+*.sqlite
+*.sqlite3
+# File sampingan SQLite
+*.db-shm
+*.db-wal
 
+# Chroma & uploads lokal
 chroma_db/
+chroma.sqlite3
 uploads/
-.venv/
-venv/
-.hermes/
+
+# Testing & coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
 
 # Log & artefak debug lokal
 *.log
 *.err.log
-cookies.txt
-nul
-.ss_token
-
-# Basis data lokal (file sampingan SQLite)
-*.db-shm
-*.db-wal
-
-# Keluaran audit FE-BE (audit_fe_be.py)
+logs/
 _audit_result.json
+
+# OS & IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+
+# Agent & tooling lokal
+.claude/
+.cursor/
+.hermes/
+
+# Artefak sementara / audit lokal (jangan di-push)
+backup_*.txt
+diag_*.pdf
+diag_*.tex
+diag_*.md
+tmp_*.py
+tmp_*.txt
+tmp_*.ps1
+test_*.docx
+test.docx
+test_*.pdf

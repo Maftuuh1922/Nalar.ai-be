@@ -67,6 +67,51 @@ def load_json(raw: str | None, fallback: dict) -> dict:
     return data if isinstance(data, dict) else copy.deepcopy(fallback)
 
 
+def _dedupe_profile_ids(service: dict) -> None:
+    """Pastikan setiap profil dalam sebuah layanan punya ``id`` unik.
+
+    Data warisan/impor bisa memuat beberapa profil dengan id yang sama
+    (mis. semuanya ``"llm-prof"``). ``find_by_id`` hanya mengembalikan yang
+    PERTAMA, sehingga model pada profil kembar tak pernah ter-resolve dan
+    pemilihan model di kolom chat tampak "macet" (lihat model_selection.py).
+    Di sini id kembar diberi akhiran deterministik ("-2", "-3", …) supaya
+    stabil di tiap pembacaan. Bila ``active_profile_id`` jadi ambigu karena
+    remap, arahkan ke profil yang benar-benar memuat ``active_model_id``.
+    """
+    profiles = service.get("profiles")
+    if not isinstance(profiles, list):
+        return
+    used: set = set()
+    remapped = False
+    for profile in profiles:
+        if not isinstance(profile, dict):
+            continue
+        pid = profile.get("id")
+        if pid in used:
+            n = 2
+            new_id = f"{pid}-{n}"
+            while new_id in used:
+                n += 1
+                new_id = f"{pid}-{n}"
+            profile["id"] = new_id
+            used.add(new_id)
+            remapped = True
+        else:
+            used.add(pid)
+    if not remapped:
+        return
+    active_model_id = service.get("active_model_id")
+    if not active_model_id:
+        return
+    for profile in profiles:
+        if isinstance(profile, dict) and any(
+            isinstance(m, dict) and m.get("id") == active_model_id
+            for m in (profile.get("models") or [])
+        ):
+            service["active_profile_id"] = profile.get("id")
+            return
+
+
 def merge_catalog(raw: object) -> dict:
     """Lengkapi katalog agar selalu memuat seluruh layanan yang dikenal FE.
 
@@ -94,6 +139,7 @@ def merge_catalog(raw: object) -> dict:
         merged["profiles"] = (
             [p for p in profiles if isinstance(p, dict)] if isinstance(profiles, list) else []
         )
+        _dedupe_profile_ids(merged)
         catalog["services"][name] = merged
 
     return catalog

@@ -331,12 +331,14 @@ _TINGKAT_HEADING = {
 
 # Perintah preamble/tata letak yang tidak punya padanan Markdown.
 _ABAIKAN_AWALAN = (
-    r"\documentclass", r"\usepackage", r"\geometry", r"\title", r"\author",
+    r"\documentclass", r"\usepackage", r"\geometry", r"\author",
     r"\date", r"\maketitle", r"\begin{document}", r"\end{document}",
     r"\onehalfspacing", r"\setstretch", r"\centering", r"\begin{figure}",
     r"\end{figure}", r"\begin{center}", r"\end{center}", r"\begingroup",
     r"\endgroup", r"\toprule", r"\midrule", r"\bottomrule", r"\hline",
     r"\newpage", r"\clearpage", r"\tableofcontents",
+    # Perintah spasi vertikal/horizontal tak punya padanan Markdown → dibuang.
+    r"\vspace", r"\hspace", r"\vfill", r"\smallskip", r"\medskip", r"\bigskip",
     # Sampul hasil impor mematikan nomor halaman; untuk DOCX itu tak ada
     # padanannya, jadi barisnya dibuang seperti \newpage.
     r"\thispagestyle",
@@ -345,6 +347,8 @@ _ABAIKAN_AWALAN = (
 _HEADING_TEX = re.compile(
     r"^\\(chapter|section|subsection|subsubsection|paragraph)\*?\s*\{(.*)\}\s*$"
 )
+# Judul dokumen: dikonversi jadi heading, TIDAK dibuang seperti preamble lain.
+_TITLE_TEX = re.compile(r"^\\title\*?\s*\{(.*)\}\s*$")
 _GAMBAR_TEX = re.compile(r"\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}")
 _CAPTION_TEX = re.compile(r"\\caption\{(.*)\}")
 # Baris daftar isi: "\noindent Judul \dotfill 12 \\"
@@ -530,6 +534,32 @@ def latex_to_markdown(latex_source: str) -> str:
             i += 1
             continue
 
+        # Judul dokumen: \title{...} → heading tingkat-1 supaya TIDAK hilang saat
+        # migrasi ke Markdown (dulu ikut dibuang bersama preamble). Editor Word
+        # merender `#` jadi judul tebal & rata tengah. \maketitle/\author/\date
+        # yang kosong tetap dibuang lewat _ABAIKAN_AWALAN.
+        m = _TITLE_TEX.match(line)
+        if m:
+            judul = _inline_ke_markdown(m.group(1)).strip()
+            # Judul yang seluruhnya \textbf{...} → buang ** (heading sudah tebal).
+            if judul.startswith("**") and judul.endswith("**") and len(judul) > 4:
+                judul = judul[2:-2].strip()
+            if judul:
+                out.append(f"# {judul}")
+            i += 1
+            continue
+
+        # Abstrak: jadikan heading `## Abstrak` agar tampil sebagai bagian, bukan
+        # perintah lingkungan mentah (dulu `\begin{abstract}` bocor sebagai teks).
+        if line.startswith(r"\begin{abstract}"):
+            out.append("## Abstrak")
+            i += 1
+            continue
+        if line.startswith(r"\end{abstract}"):
+            out.append("")
+            i += 1
+            continue
+
         # Pembungkus tabel & gambar tidak membawa isi.
         if line.startswith((r"\begin{table}", r"\end{table}")):
             i += 1
@@ -598,6 +628,14 @@ def latex_to_markdown(latex_source: str) -> str:
 
         if not line:
             out.append("")
+            i += 1
+            continue
+
+        # Lingkungan LaTeX tak dikenal (mis. \begin{tabbing}) — buang baris
+        # penandanya, jangan cetak mentah. Semua lingkungan yang KITA tangani
+        # (verbatim, tabular, center, table, itemize, enumerate, abstract) sudah
+        # `continue` di atas, jadi yang sampai sini pasti di luar cakupan.
+        if re.match(r"^\\(?:begin|end)\{", line):
             i += 1
             continue
 

@@ -545,12 +545,19 @@ def _number_figures_tables(html: str) -> str:
 
     def tbl_repl(match: re.Match) -> str:
         nonlocal tbl_count
-        atribut = match.group(1)
-        inner = match.group(2)
+        cap = match.group("cap") or ""
+        atribut = match.group("attr")
+        inner = match.group("inner")
         # Blok daftar isi juga berupa <table> (demi kompatibilitas xhtml2pdf),
         # tetapi ia bukan tabel data sehingga tidak diberi nomor "Tabel N".
         if "toc" in atribut:
             return match.group(0)
+        # Sudah ada keterangan tabel manual ("**Tabel 5.1 …**") tepat di atas
+        # tabel → JANGAN tambah caption "Tabel N" kedua (kalau tidak, muncul
+        # label ganda: "Tabel 2" otomatis + "Tabel 5.1" manual). Nomornya juga
+        # tidak dimajukan supaya tabel tanpa keterangan tetap berurut rapi.
+        if cap:
+            return f"{cap}<table{atribut}>{inner}</table>"
         tbl_count += 1
         return (
             f"<table{atribut}><caption class='caption'>Tabel {tbl_count}</caption>{inner}</table>"
@@ -561,7 +568,18 @@ def _number_figures_tables(html: str) -> str:
     # Gambar sisa (mis. di dalam tabel atau butir daftar) — yang sudah masuk
     # <figure> pada tahap di atas dilewati agar tidak terbungkus dua kali.
     html = re.sub(r"(?<!<figure>)(?P<img><img\b[^>]*/?>)", fig_repl, html)
-    html = re.sub(r"<table([^>]*)>(.*?)</table>", tbl_repl, html, flags=re.S)
+    # `cap` opsional menangkap paragraf keterangan manual ("Tabel 5.1 …") yang
+    # menempel tepat sebelum tabel; bila ada, tbl_repl tak menomori ulang.
+    _KAP_MANUAL = (
+        r"(?P<cap><p>\s*(?:<strong>|<b>|<em>|<i>)?\s*"
+        r"(?:Tabel|Table)\s+[\dIVXLCM][\w.\-]*[\s\S]*?</p>\s*)?"
+    )
+    html = re.sub(
+        _KAP_MANUAL + r"<table(?P<attr>[^>]*)>(?P<inner>.*?)</table>",
+        tbl_repl,
+        html,
+        flags=re.S,
+    )
     # Sel kosong membuat xhtml2pdf menghitung lebar kolomnya nol, lalu gagal
     # dengan "negative availWidth". Diisi spasi keras agar tetap punya lebar.
     html = re.sub(r"<(td|th)([^>]*)>\s*</\1>", r"<\1\2>&nbsp;</\1>", html)

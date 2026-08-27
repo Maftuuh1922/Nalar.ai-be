@@ -18,7 +18,7 @@ kelas tool:
 
 Alur ini membuat frontend tidak perlu komunikasi dua-arah di tengah SSE: server
 memimpin loop, frontend mengeksekusi tulisan dan melaporkan kebenarannya di
-ringkasan. Lihat [[nalar-cowriter-agentic-roadmap]] Fase A.
+ringkasan.
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ import json
 import logging
 import re
 import uuid
+from pathlib import Path
 from typing import Any, AsyncGenerator
 
 from openai import AsyncOpenAI
@@ -125,6 +126,31 @@ def _mode_config(mode: str | None) -> dict[str, Any]:
 # validasi jangkar melihat tulisan model sendiri dalam satu giliran. BUKAN
 # sumber kebenaran; editor SuperDoc di frontend yang otoritatif.
 # --------------------------------------------------------------------------- #
+def _tolerant_replace(text: str, find: str, replace: str, all_occurrences: bool) -> tuple[str, int]:
+    """Ganti `find`→`replace` dengan TOLERANSI SPASI.
+
+    Model gratis kerap mengetik ulang `find` dari ingatan, sehingga spasi/ganti
+    baris beda tipis dari naskah → substring persis gagal → perbaikan hilang
+    diam-diam. (1) coba substring persis (paling aman); (2) bila gagal, cocokkan
+    lewat regex di mana tiap deret whitespace pada `find` boleh cocok dengan
+    whitespace apa pun. Kembalikan (teks_baru, jumlah_ganti).
+    """
+    if not find:
+        return text, 0
+    if find in text:
+        n = text.count(find) if all_occurrences else 1
+        return text.replace(find, replace, -1 if all_occurrences else 1), n
+    tokens = [t for t in re.split(r"\s+", find.strip()) if t]
+    if not tokens:
+        return text, 0
+    try:
+        rx = re.compile(r"\s+".join(re.escape(t) for t in tokens))
+    except re.error:
+        return text, 0
+    # Lambda pengganti: `replace` tak boleh diinterpretasi sebagai template \g<>.
+    return rx.subn(lambda _m: replace, text, count=0 if all_occurrences else 1)
+
+
 class _ShadowDoc:
     def __init__(self, text: str) -> None:
         # Simpan sebagai daftar baris agar sisip berjangkar mudah & murah.
@@ -162,15 +188,12 @@ class _ShadowDoc:
     def replace(self, find: str, replace: str, all_occurrences: bool) -> int:
         if not find:
             return 0
-        count = 0
-        for i, line in enumerate(self._lines):
-            if find in line:
-                n = line.count(find) if all_occurrences else 1
-                self._lines[i] = line.replace(find, replace, -1 if all_occurrences else 1)
-                count += n
-                if not all_occurrences:
-                    break
-        return count
+        new_text, n = _tolerant_replace(
+            "\n".join(self._lines), find, replace, all_occurrences
+        )
+        if n:
+            self._lines = new_text.splitlines()
+        return n
 
     def find(self, query: str, limit: int = 8) -> list[dict[str, Any]]:
         if not query:
@@ -275,13 +298,18 @@ _TOOL_DOC_REPLACE = {
         "name": "doc_replace",
         "description": (
             "Ganti kemunculan teks `find` dengan `replace`. Untuk merapikan, "
-            "memperbaiki, atau menyunting kalimat yang sudah ada di dokumen."
+            "memperbaiki, atau menyunting kalimat yang SUDAH ada di dokumen. "
+            "PENTING: `find` harus potongan PERSIS & PENDEK (idealnya satu "
+            "kalimat/frasa, ≲120 karakter) yang kamu SALIN VERBATIM dari hasil "
+            "`find_in_document` — jangan diketik ulang dari ingatan, jangan "
+            "diparafrasa, jangan menyertakan seluruh paragraf. Pencocokan kini "
+            "toleran beda spasi/ganti baris, tapi kata-katanya tetap harus sama."
         ),
         "parameters": {
             "type": "object",
             "properties": {
-                "find": {"type": "string", "description": "Teks persis yang dicari."},
-                "replace": {"type": "string", "description": "Teks pengganti."},
+                "find": {"type": "string", "description": "Potongan PERSIS & PENDEK yang disalin dari find_in_document (bukan parafrasa)."},
+                "replace": {"type": "string", "description": "Teks pengganti (versi rapi/perbaikannya)."},
                 "all": {"type": "boolean", "description": "Ganti semua kemunculan (default hanya pertama)."},
             },
             "required": ["find", "replace"],
@@ -533,22 +561,66 @@ def _build_tools(mode_cfg: dict[str, Any], allow_web: bool) -> list[dict]:
     return tools
 
 
+def _muat_kraf_skill() -> str:
+    """Muat badan SKILL.md 'penulisan-jurnal-akademik' (tanpa frontmatter) untuk
+    disuntik sebagai lapis kraf ke prompt sistem. Defensif: bila berkas tak ada,
+    kembalikan string kosong supaya agent tetap jalan dengan kontrak operasional.
+    """
+    try:
+        p = Path(__file__).parent / "skills" / "penulisan-jurnal-akademik" / "SKILL.md"
+        teks = p.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    # Buang frontmatter YAML (--- ... ---) di awal; sisakan badan instruksi.
+    if teks.startswith("---"):
+        bagian = teks.split("---", 2)
+        if len(bagian) == 3:
+            teks = bagian[2]
+    return teks.strip()
+
+
+_SKILL_KRAF = _muat_kraf_skill()
+
+
 _SYSTEM_PROMPT = (
     "Kamu adalah ASISTEN AGENTIC penulis laporan akademik di dalam editor mirip "
     "Word. Kamu tidak sekadar menjawab — kamu BEKERJA: menyusun rencana lalu "
     "mengeksekusinya langsung ke dokumen pengguna lewat tool.\n\n"
     "ALUR WAJIB:\n"
-    "1. PANGGIL `submit_plan` LEBIH DULU dengan daftar tugas konkret sesuai "
-    "instruksi pengguna. Jangan menulis apa pun sebelum ini.\n"
+    "0. GROUNDING DULU (sebelum merencana): panggil `cite_list` untuk melihat "
+    "referensi yang tersedia — utamakan jurnal yang diunggah pengguna — dan untuk "
+    "bagian yang bergantung isi sumber, `ref_read` sumber kuncinya. Ini BUKAN "
+    "menulis; ini mengenali bahan agar rencanamu berpijak pada sumber nyata.\n"
+    "1. PANGGIL `submit_plan` dengan daftar tugas konkret sesuai instruksi "
+    "pengguna DAN sumber yang ada. Rencana WAJIB memuat, menjelang akhir, satu "
+    "tugas 'Penyempurnaan & uji-baca' tepat sebelum tugas Daftar Pustaka. Jangan "
+    "MENULIS (doc_insert/doc_replace/cite_insert) apa pun sebelum submit_plan.\n"
     "2. Kerjakan tugas SATU per SATU sesuai urutan rencana. Untuk tiap tugas: "
     "panggil `set_task_status(index, 'running')`, lakukan pekerjaannya (tool "
     "tulis/riset), lalu `set_task_status(index, 'done')`. WAJIB menandai setiap "
     "tugas — jangan menulis isi tanpa memperbarui status tugasnya.\n"
-    "3. Gunakan `doc_insert` untuk menambah isi, `doc_replace` untuk merapikan/"
-    "memperbaiki teks yang ada, `cite_insert` untuk sitasi.\n"
-    "4. Sebelum `doc_replace` atau `cite_insert`, pakai `find_in_document` untuk "
-    "memastikan teks jangkar benar-benar ada. Kalau tidak ada, cari alternatif.\n"
-    "5. Setelah SEMUA tugas berstatus 'done', berikan RINGKASAN akhir singkat "
+    "3. Gunakan `doc_insert` untuk menambah isi, `doc_replace` untuk menyunting "
+    "teks yang SUDAH ada, `cite_insert` untuk sitasi. TULIS SEKALI JADI: tiap "
+    "`doc_insert` harus SUDAH berkualitas final — kalimat mengalir, ada transisi "
+    "antar-paragraf, klaim penting bersitasi. JANGAN menulis draf kasar dengan "
+    "niat 'nanti dirapikan lewat doc_replace'; langkah rapikan itu rapuh dan bisa "
+    "gagal, jadi kerapihan HARUS lahir sejak insert pertama.\n"
+    "4. Sebelum `doc_replace` atau `cite_insert`, WAJIB `find_in_document` dulu, "
+    "lalu SALIN VERBATIM potongan PENDEK (satu frasa/kalimat) dari hasilnya "
+    "sebagai `find` — jangan mengetik `find` dari ingatan, jangan sepanjang "
+    "paragraf. Kalau `doc_replace` menjawab 'tak ditemukan', JANGAN mengarang "
+    "atau mengulang membabi buta: `find_in_document` lagi untuk menyalin teks "
+    "yang benar, atau lewati suntingan itu.\n"
+    "5. PENYEMPURNAAN & UJI-BACA (tugas kedua-terakhir, sebelum Daftar Pustaka): "
+    "baca ulang lewat `find_in_document`, lalu lakukan HANYA suntingan kecil & "
+    "bedah (surgical) via `doc_replace` dengan `find` yang disalin verbatim — "
+    "buang klise, padatkan kalimat bertele-tele, pastikan tiap klaim penting "
+    "bersitasi, dan periksa tak ada kontradiksi antar-bagian. JANGAN menulis "
+    "ulang paragraf besar sekaligus (pasti gagal). Karena kamu sudah menulis "
+    "berkualitas sejak awal (poin 3), tahap ini ringan. Rincian di bagian SKILL "
+    "di bawah. Jangan tandai tugas ini 'done' sebelum benar-benar membaca ulang "
+    "isinya.\n"
+    "6. Setelah SEMUA tugas berstatus 'done', berikan RINGKASAN akhir singkat "
     "dalam bahasa Indonesia (apa yang dikerjakan, di mana) TANPA memanggil tool "
     "lagi. JANGAN memberi ringkasan selama masih ada tugas 'pending'/'running'.\n\n"
     "JANGAN BERHENTI DI TENGAH:\n"
@@ -569,10 +641,22 @@ _SYSTEM_PROMPT = (
     "menambah salinan baru di bawah.\n\n"
     "ATURAN ISI:\n"
     "- Tulis dalam Bahasa Indonesia akademik. Isi tool `doc_insert`/`doc_replace` "
-    "berupa MARKDOWN (judul `##`, tebal `**`, daftar `-`). BUKAN LaTeX.\n"
+    "berupa MARKDOWN MURNI: judul jurnal pakai `# Judul` (SATU tanda pagar → "
+    "otomatis besar, tebal, & rata tengah di editor), sub-bab `##`/`###`, tebal "
+    "`**...**`, daftar `-`, dan pisahkan antar-paragraf dengan BARIS KOSONG.\n"
+    "- DILARANG KERAS mengeluarkan LaTeX. JANGAN pernah menulis `\\title{}`, "
+    "`\\maketitle`, `\\author{}`, `\\date{}`, `\\begin{...}`/`\\end{...}`, "
+    "`\\section{}`, atau `\\textbf{}` — WALAUPUN 'POTRET DOKUMEN' di bawah kebetulan "
+    "berisi LaTeX. Ketebalan & rata-tengah judul dibuat oleh editor dari `#`, "
+    "BUKAN dari perintah LaTeX. Kalau potret berisi LaTeX, abaikan sintaksnya dan "
+    "tetap tulis Markdown.\n"
     "- DILARANG mengarang fakta, angka, DOI, atau referensi. Untuk data yang belum "
     "diberikan pengguna, tulis penanda `[BUTUH DATA: ...]`.\n"
     "- Rapikan hanya yang perlu; jangan menghapus isi pengguna tanpa alasan.\n"
+    "- Bila konteks memuat 'TEMPLATE/CONTOH WAJIB DIIKUTI', susunan bab, "
+    "penomoran, urutan bagian, dan gaya tulisanmu WAJIB mengikuti template itu "
+    "PERSIS — jangan mengarang struktur sendiri, jangan menambah/menghapus bab di "
+    "luar kerangka template.\n"
     "- Efisien: jangan mengulang tool yang sama tanpa hasil baru.\n\n"
     "SITASI (WAJIB diikuti — ini yang mengisi Daftar Pustaka):\n"
     "Laporan ini memakai sitasi bernomor gaya IEEE: `[1]`, `[2]`, dan seterusnya. "
@@ -600,6 +684,54 @@ _SYSTEM_PROMPT = (
     "tidak dipakai di teks tidak akan muncul di sana."
 )
 
+# Sisipkan badan SKILL 'penulisan-jurnal-akademik' sebagai lapis kraf di atas
+# kontrak operasional (pola progressive-disclosure Agent Skills): kontrak inti di
+# atas selalu ada; playbook mutu di-load dari berkas yang bisa disetel terpisah.
+if _SKILL_KRAF:
+    _SYSTEM_PROMPT += (
+        "\n\n===== SKILL: PENULISAN JURNAL AKADEMIK (playbook mutu) =====\n"
+        + _SKILL_KRAF
+    )
+
+
+# Prompt untuk FASE PROPOSE (brainstorm "rencana → setujui → kerjakan"). Di fase
+# ini agent BELUM menyentuh dokumen: ia grounding, mengusulkan rencana, menulis
+# brainstorm singkat, lalu BERHENTI menunggu persetujuan. Kecerdasan ada di alur
+# (grounding + berpikir di depan pengguna + gerbang persetujuan), sehingga tetap
+# terasa pintar walau modelnya lemah. Eksekusi terjadi di giliran terpisah
+# (fase execute) setelah pengguna menyetujui.
+_PROPOSE_SYSTEM_PROMPT = (
+    "Kamu adalah ASISTEN AGENTIC penulis laporan akademik di dalam editor mirip "
+    "Word. SAAT INI kamu di TAHAP USUL RENCANA (brainstorm) — kamu BELUM menulis "
+    "ke dokumen. Tujuanmu: mengusulkan rencana yang berpijak pada sumber nyata, "
+    "lalu BERHENTI menunggu persetujuan pengguna.\n\n"
+    "LAKUKAN BERURUTAN:\n"
+    "1. GROUNDING DULU: panggil `cite_list` untuk melihat referensi & catatan "
+    "yang tersedia — UTAMAKAN jurnal/catatan yang diunggah pengguna (termasuk "
+    "catatan dari vault Obsidian bila ada). Untuk bagian yang bergantung isi "
+    "sumber, baca sumber kuncinya dengan `ref_read`. Ini mengenali bahan supaya "
+    "rencanamu berpijak pada sumber, bukan mengarang. Boleh `search_web`/"
+    "`arxiv_search` bila perlu, TAPI utamakan bahan pengguna lebih dulu.\n"
+    "2. `submit_plan` dengan daftar tugas konkret sesuai instruksi pengguna DAN "
+    "sumber yang ada (struktur IMRaD bila itu laporan penelitian). Bila konteks "
+    "memuat 'TEMPLATE/CONTOH WAJIB DIIKUTI', daftar tugas & urutan/penomoran bab "
+    "dalam rencana WAJIB mengikuti struktur template itu PERSIS. Sertakan, "
+    "menjelang akhir, tugas 'Penyempurnaan & uji-baca' tepat sebelum tugas "
+    "'Daftar Pustaka'.\n"
+    "3. Setelah `submit_plan`, TULIS BRAINSTORM SINGKAT dalam Bahasa Indonesia "
+    "(2–5 kalimat, prosa biasa — BUKAN tool): jelaskan kenapa struktur itu, "
+    "sumber/catatan mana yang akan dipakai (sebut nomor sitasi `[n]` atau nama "
+    "catatan), dan asumsi penting. Tutup dengan ajakan minta persetujuan, mis. "
+    "'Setuju saya kerjakan?'.\n"
+    "4. BERHENTI. Di fase ini DILARANG KERAS memanggil `doc_insert`, "
+    "`doc_replace`, `cite_insert`, atau `set_task_status`. JANGAN mengeksekusi "
+    "rencana. Dokumen TIDAK boleh berubah sedikit pun. Eksekusi baru terjadi "
+    "SETELAH pengguna menyetujui, di giliran berikutnya.\n\n"
+    "Hasil akhirmu adalah RENCANA + brainstorm singkat, BUKAN dokumen yang "
+    "berubah. Jangan mengarang fakta/DOI/referensi; kalau sumber kurang, katakan "
+    "di brainstorm."
+)
+
 
 async def run_agent_stream(
     client: AsyncOpenAI,
@@ -615,6 +747,10 @@ async def run_agent_stream(
     context_window: int = 8000,
     selection_text: str | None = None,
     extra_context: str | None = None,
+    phase: str = "execute",
+    approved_tasks: list[str] | None = None,
+    template_context: str | None = None,
+    session_memory: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Jalankan loop plan→execute→summarize; yield event NDJSON (dibungkus SSE
     di endpoint).
@@ -647,18 +783,79 @@ async def run_agent_stream(
         if len(snippet) > 6000:
             snippet = snippet[:3000] + "\n\n[...dipotong...]\n\n" + snippet[-2000:]
         context_note = f"\n\nPOTRET DOKUMEN SAAT INI (ringkas):\n{snippet}"
+        # Sebagian dokumen lama tersimpan sebagai LaTeX. Kalau potret berisi
+        # sintaks itu, model murah cenderung MENIRUNYA (menulis \title{}, \maketitle,
+        # dst.) meski aturan isi minta Markdown. Tegaskan ulang di sini, dekat
+        # konteksnya, supaya larangan tak "tenggelam" oleh potret yang panjang.
+        if re.search(r"\\(?:title|maketitle|author|date|section|begin|end|textbf|documentclass)\b", snippet):
+            context_note += (
+                "\n\n(CATATAN FORMAT PENTING: potret di atas kebetulan tersimpan dalam "
+                "sintaks LaTeX. ABAIKAN — JANGAN menirunya. Semua teks yang kamu tulis "
+                "lewat doc_insert/doc_replace WAJIB Markdown murni: judul `# ...`, "
+                "tebal `**...**`. DILARANG mengeluarkan `\\title`, `\\maketitle`, "
+                "`\\begin{...}`, `\\section`, atau `\\textbf{...}`.)"
+            )
     if selection_text:
         context_note += f"\n\nTEKS YANG SEDANG DISOROT PENGGUNA:\n{selection_text.strip()[:2000]}"
     if extra_context:
         context_note += f"\n\nKONTEKS TAMBAHAN DARI PENGGUNA (impor chat / lampiran):\n{extra_context.strip()[:6000]}"
+    if template_context:
+        # Template/contoh dari pengguna = KERANGKA WAJIB, bukan sekadar konteks
+        # longgar. Diperkuat lagi di kedua prompt sistem (propose & execute).
+        context_note += (
+            "\n\nTEMPLATE/CONTOH WAJIB DIIKUTI (ikuti struktur, urutan & "
+            "penomoran bab, gaya penulisan, dan format PERSIS seperti kerangka "
+            "ini — JANGAN menyusun struktur sendiri di luar template):\n"
+            f"{template_context.strip()[:6000]}"
+        )
+    if session_memory:
+        # Kontinuitas antar-run di dokumen yang sama (desain tetap stateless:
+        # memori disuntik sebagai teks, tidak disimpan riwayat di BE). Di Mode
+        # Word, doc_context hanya berisi outline heading — memori inilah yang
+        # mencegah agent menduplikasi bagian yang sudah ditulis run sebelumnya.
+        context_note += (
+            "\n\nRINGKASAN SESI SEBELUMNYA DI DOKUMEN INI (lanjutkan dari sini; "
+            "JANGAN mengulang tugas yang sudah 'selesai', JANGAN menduplikasi "
+            "bagian yang sudah ada di dokumen — fokuskan ke yang belum tuntas):\n"
+            f"{session_memory.strip()[:3000]}"
+        )
+
+    # Pilih kontrak sesuai fase: propose (brainstorm, read-only) vs execute
+    # (perilaku lama: rencanakan bila perlu lalu tulis sampai tuntas).
+    system_prompt = _PROPOSE_SYSTEM_PROMPT if phase == "propose" else _SYSTEM_PROMPT
+
+    # Fase execute dgn rencana yang SUDAH disetujui: sisipkan daftar tugas ke
+    # instruksi supaya model tidak merencana ulang, langsung mengeksekusi.
+    approved_note = ""
+    if phase == "execute" and approved_tasks:
+        _daftar = "\n".join(f"{i}. {t}" for i, t in enumerate(approved_tasks))
+        approved_note = (
+            "\n\nRENCANA SUDAH DISETUJUI PENGGUNA. JANGAN panggil `submit_plan` "
+            "lagi. Langsung KERJAKAN tugas di bawah SATU per SATU (untuk tiap "
+            "tugas: `set_task_status` 'running' → tulis dgn doc_insert/doc_replace "
+            f"→ 'done'):\n{_daftar}"
+        )
 
     messages: list[dict[str, Any]] = [
-        {"role": "system", "content": _SYSTEM_PROMPT},
-        {"role": "user", "content": f"INSTRUKSI: {instruction}{context_note}"},
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"INSTRUKSI: {instruction}{context_note}{approved_note}"},
     ]
 
     plan_tasks: list[dict[str, Any]] = []
     plan_submitted = False
+
+    # Fase execute: pra-isi daftar tugas dari rencana yang disetujui (bentuk
+    # PERSIS seperti cabang submit_plan) & tandai plan_submitted=True SEBELUM loop.
+    # Efeknya: (a) tool_choice langsung "auto" (tak dipaksa submit_plan lagi) dan
+    # (b) tool tulis tidak diblokir Guard D. Event `plan` normalnya HANYA keluar
+    # di cabang submit_plan, jadi pancarkan MANUAL di sini agar FE tetap
+    # menampilkan daftar tugas untuk melacak `task_status`.
+    if phase == "execute" and approved_tasks:
+        for i, title in enumerate(approved_tasks):
+            _t = title if isinstance(title, str) else str(title)
+            plan_tasks.append({"index": i, "title": _t.strip()[:200], "status": "pending"})
+        plan_submitted = True
+        yield json.dumps({"event": "plan", "data": {"tasks": plan_tasks}}) + "\n"
     # Dorongan "jangan berhenti" bila model berhenti sebelum rencana tuntas.
     # Dibatasi agar tak jadi loop tak berujung pada model yang keras kepala.
     continue_nudges = 0
@@ -706,21 +903,39 @@ async def run_agent_stream(
                 except Exception as e2:  # noqa: BLE001
                     last_err = e2
             if stream is None:
-                msg = str(last_err)
-                if iteration == 0 or not plan_submitted:
-                    # Belum ada kemajuan → laporkan sebagai error awal.
-                    yield json.dumps({"event": "error", "data": msg}) + "\n"
+                # str(exception) bisa berupa blob JSON 400 mentah dari gateway
+                # (mis. provider free membalas assistant KOSONG lalu dibungkus
+                # 'bad_request'), atau bahkan string kosong. Selalu LOG penuh —
+                # jalur "belum ada rencana" dulu diam sehingga kegagalan tak
+                # terlihat di server — dan JANGAN muntahkan blob itu apa adanya ke
+                # UI; ringkas jadi pesan yang bisa ditindaklanjuti.
+                msg = str(last_err) or type(last_err).__name__
+                logger.error(
+                    "agent_run: gagal memanggil model di iterasi %s "
+                    "(plan_submitted=%s, model=%s): %s",
+                    iteration, plan_submitted, model_name, msg,
+                )
+                if not plan_submitted:
+                    # Sebagian kemajuan mungkin sudah ada (mis. cite_list jalan),
+                    # tapi rencana belum tersusun. Kegagalan tipikal di sini:
+                    # model/endpoint tak menangani pemanggilan tool beruntun
+                    # (giliran berisi pesan hasil-tool) dengan andal.
+                    detail = (
+                        "Model gagal melanjutkan setelah langkah awal — endpoint "
+                        "membalas galat saat giliran tool berikutnya. Ini biasanya "
+                        "berarti model/endpoint tidak menangani tool-calling "
+                        "beruntun dengan andal (umum pada model gratis). Coba "
+                        "jalankan lagi, atau pilih model lain yang mendukung "
+                        "tool-calling di Pengaturan."
+                    )
                 else:
                     # Sudah menulis sebagian → beri tahu terputus, jangan diam.
-                    logger.error(f"agent_run iterasi {iteration} gagal total: {msg}")
-                    yield json.dumps({
-                        "event": "error",
-                        "data": (
-                            "Koneksi ke model terputus di tengah pekerjaan; sebagian "
-                            "sudah ditulis ke dokumen. Klik Kerjakan lagi untuk "
-                            "melanjutkan bagian yang belum selesai."
-                        ),
-                    }) + "\n"
+                    detail = (
+                        "Koneksi ke model terputus di tengah pekerjaan; sebagian "
+                        "sudah ditulis ke dokumen. Klik Kerjakan lagi untuk "
+                        "melanjutkan bagian yang belum selesai."
+                    )
+                yield json.dumps({"event": "error", "data": detail}) + "\n"
                 break
 
         tool_calls: dict[int, dict[str, Any]] = {}
@@ -754,9 +969,23 @@ async def run_agent_stream(
                 if not dsml_seen and _DSML_START.search(content_buffer):
                     dsml_seen = True
 
-            if hasattr(delta, "reasoning_content") and delta.reasoning_content:
-                reasoning_buffer += delta.reasoning_content
-                yield json.dumps({"event": "reasoning", "data": delta.reasoning_content}) + "\n"
+            # Jejak penalaran datang dengan nama field berbeda tergantung gateway:
+            # OpenAI-style `reasoning_content`, atau `reasoning` (dipakai router
+            # BYO proyek ini — terukur pada model oc/*). Tanpa menangkap keduanya,
+            # reasoning_buffer selalu kosong pada model penalar, sehingga (a) panel
+            # FE tampak beku selama model berpikir dan (b) jaring pengaman anggaran
+            # di bawah — yang mensyaratkan reasoning_buffer terisi — tak pernah
+            # aktif, membuat model penalar berhenti diam-diam saat anggaran habis.
+            _reason = (
+                getattr(delta, "reasoning_content", None)
+                or getattr(delta, "reasoning", None)
+            )
+            if not _reason:
+                _extra = getattr(delta, "model_extra", None) or {}
+                _reason = _extra.get("reasoning_content") or _extra.get("reasoning")
+            if _reason:
+                reasoning_buffer += _reason
+                yield json.dumps({"event": "reasoning", "data": _reason}) + "\n"
 
             if delta.tool_calls:
                 for tc in delta.tool_calls:
@@ -840,6 +1069,29 @@ async def run_agent_stream(
                         )
                     ),
                 }) + "\n"
+                break
+
+            # FASE PROPOSE: begitu model berhenti memanggil tool, tahap usul
+            # rencana selesai. JANGAN dorong-lanjut menulis (Guard B/C di bawah
+            # hanya untuk fase execute) — pancarkan brainstorm model (atau ajakan
+            # default bila kosong) lalu tutup. Dokumen tak pernah tersentuh karena
+            # tool tulis diblokir sepanjang fase ini (lihat Guard D di bawah).
+            if phase == "propose":
+                if content_buffer:
+                    yield json.dumps({"event": "text", "data": content_buffer}) + "\n"
+                elif plan_submitted:
+                    yield json.dumps({
+                        "event": "text",
+                        "data": "Itu rencana yang saya usulkan. Setuju untuk saya kerjakan?",
+                    }) + "\n"
+                else:
+                    yield json.dumps({
+                        "event": "error",
+                        "data": (
+                            "Model belum menghasilkan rencana. Coba perjelas "
+                            "instruksi atau pilih model lain di Pengaturan."
+                        ),
+                    }) + "\n"
                 break
 
             # Model berhenti memanggil tool. Kalau rencana BELUM tuntas (masih ada
@@ -943,19 +1195,29 @@ async def run_agent_stream(
             # dan tool tulis dieksekusi frontend (fe=true) sehingga tulisan liar itu
             # benar-benar mengubah dokumen. Penolakan di sini membuat model
             # merencanakan dulu tanpa merusak apa pun.
-            if is_fe and not plan_submitted:
+            if is_fe and (not plan_submitted or phase == "propose"):
                 logger.info(
-                    "agent_run: %s ditolak — rencana belum disubmit.", tc_name
+                    "agent_run: %s ditolak (fase=%s, plan_submitted=%s).",
+                    tc_name, phase, plan_submitted,
+                )
+                _reason = (
+                    (
+                        "Ini TAHAP USUL RENCANA — dokumen belum boleh disentuh. "
+                        "Jangan menulis; cukup usulkan rencana lalu berhenti dan "
+                        "tunggu persetujuan pengguna."
+                    )
+                    if phase == "propose"
+                    else (
+                        "Belum ada rencana. Panggil submit_plan lebih dulu, baru "
+                        "menulis. Tidak ada perubahan yang diterapkan ke dokumen."
+                    )
                 )
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tc_id,
                     "content": json.dumps({
                         "status": "rejected",
-                        "reason": (
-                            "Belum ada rencana. Panggil submit_plan lebih dulu, baru "
-                            "menulis. Tidak ada perubahan yang diterapkan ke dokumen."
-                        ),
+                        "reason": _reason,
                     }),
                 })
                 continue

@@ -4,7 +4,10 @@ FE memanggil banyak endpoint yang belum ada di BE. File ini menambahkan
 stub/placeholder endpoints agar FE tidak 404/405. Endpoint yang memerlukan
 logika nyata nanti diisi.
 """
+import asyncio
+import logging
 import uuid
+from pathlib import Path
 from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
@@ -15,6 +18,9 @@ from app.api.deps import get_current_user, get_optional_user, get_db
 from app.models.user import User
 from app.models.notebook import Notebook
 from app.models.memory import Memory
+from app.models.journal import JournalGroup, JournalReference
+
+logger = logging.getLogger(__name__)
 
 # ── Memory workbench stubs ──────────────────────────────────────────────
 memory_extra = APIRouter(prefix="/memory", tags=["memory"])
@@ -872,12 +878,160 @@ async def knowledge_create(
 ):
     return {"kb_id": str(uuid.uuid4()), "status": "created"}
 
+# Batas berkas .md yang diimpor sekali jalan — vault besar tidak boleh
+# menggantung request. Overflow dilaporkan (jangan diam-diam dipotong).
+_MAKS_MD_VAULT = 200
+
+
+def _pindai_vault_md(root: Path) -> tuple[list[dict[str, str]], int]:
+    """Pindai `*.md` di vault (rekursif). Kembalikan (daftar berkas, total ditemukan).
+
+    Judul diambil dari heading `#` pertama; jika tidak ada, pakai nama berkas.
+    Isi TIDAK dibaca penuh di sini — hanya beberapa baris awal untuk judul; isi
+    lengkap dibaca on-demand oleh `ref_read`. Berjalan di thread (I/O blocking).
+    """
+    semua = sorted(p for p in root.rglob("*.md") if p.is_file())
+    total = len(semua)
+    hasil: list[dict[str, str]] = []
+    for p in semua[:_MAKS_MD_VAULT]:
+        judul = p.stem
+        try:
+            with p.open("r", encoding="utf-8", errors="ignore") as f:
+                for _ in range(60):  # cukup untuk lewati front-matter YAML
+                    baris = f.readline()
+                    if not baris:
+                        break
+                    s = baris.strip()
+                    if s.startswith("#"):
+                        judul = s.lstrip("#").strip()[:300] or p.stem
+                        break
+        except OSError:
+            pass
+        hasil.append(
+            {"path": str(p.resolve()), "filename": p.name[:500], "title": judul[:1000]}
+        )
+    return hasil, total
+
+
 @knowledge_extra.post("/connect-obsidian")
 async def knowledge_connect_obsidian(
     request: Request,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    return {"status": "error", "message": "Obsidian vault not found"}
+    """Impor vault Obsidian sebagai referensi jurnal — sumber pengetahuan agent.
+
+    Vault = folder catatan Markdown milik pengguna. Tiap `.md` didaftarkan sebagai
+    satu `JournalReference` (pola sama seperti `cite_add`) dengan `file_path` = path
+    absolut berkas; isi TIDAK disalin — `ref_read` membacanya on-demand. Dengan
+    begitu catatan vault otomatis muncul di `cite_list` dan bisa dibaca agent saat
+    grounding/brainstorm TANPA tool atau model embedding baru (model-agnostik),
+    langsung menyambung ke alur referensi/sitasi jurnal.
+
+    Impor bersifat MENAMBAH & idempoten: berkas yang `file_path`-nya sudah terdaftar
+    dilewati (menghormati "jangan hapus data"). Body: `{name, vault_path}`.
+    """
+    try:
+        payload = await request.json()
+    except Exception:  # noqa: BLE001
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+
+    nama = (str(payload.get("name") or "").strip() or "Vault Obsidian")[:255]
+    vault_path = str(payload.get("vault_path") or "").strip()
+    if not vault_path:
+        raise HTTPException(status_code=400, detail="Path vault kosong.")
+
+    root = Path(vault_path).expanduser()
+    if not root.exists() or not root.is_dir():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Folder vault tidak ditemukan atau bukan folder: {vault_path}",
+        )
+
+    berkas, total = await asyncio.to_thread(_pindai_vault_md, root)
+    root_abs = str(root.resolve())
+    if not berkas:
+        return {
+            "status": "ok",
+            "name": nama,
+            "vault_path": root_abs,
+            "imported": 0,
+            "skipped": 0,
+            "total_ditemukan": total,
+            "message": "Tidak ada berkas .md di folder itu.",
+        }
+
+    # Grup terpisah per-vault agar mudah ditelusuri & (kelak) dihapus per-vault.
+    grup_nama = f"Vault: {nama}"[:255]
+    grup = await db.scalar(
+        select(JournalGroup).where(
+            JournalGroup.user_id == current_user.id,
+            JournalGroup.name == grup_nama,
+        )
+    )
+    if grup is None:
+        grup = JournalGroup(
+            user_id=current_user.id,
+            name=grup_nama,
+            description=(
+                f"Catatan Obsidian dari vault '{nama}'. Sumber pengetahuan yang "
+                "dibaca agent Co-Writer saat menyusun & membrainstorm draf."
+            ),
+        )
+        db.add(grup)
+        await db.flush()
+
+    # Dedup berdasarkan file_path absolut → impor ulang vault yang sama aman.
+    terpakai = set(
+        await db.scalars(
+            select(JournalReference.file_path).where(
+                JournalReference.user_id == current_user.id
+            )
+        )
+    )
+    imported = 0
+    skipped = 0
+    for b in berkas:
+        if b["path"] in terpakai:
+            skipped += 1
+            continue
+        db.add(
+            JournalReference(
+                user_id=current_user.id,
+                group_id=grup.id,
+                filename=b["filename"],
+                file_path=b["path"],
+                title=b["title"] or b["filename"],
+                authors=None,
+                year=None,
+                journal_name=f"Catatan Obsidian — {nama}"[:1000],
+                status="extracted",
+            )
+        )
+        terpakai.add(b["path"])
+        imported += 1
+
+    await db.commit()
+    if total > len(berkas):
+        logger.info(
+            "connect-obsidian: vault '%s' punya %d berkas .md, hanya %d diimpor "
+            "(batas %d). Sisanya belum diimpor.",
+            nama, total, len(berkas), _MAKS_MD_VAULT,
+        )
+    logger.info(
+        "connect-obsidian: user %s impor vault '%s' → %d baru, %d dilewati.",
+        current_user.id, nama, imported, skipped,
+    )
+    return {
+        "status": "ok",
+        "name": nama,
+        "vault_path": root_abs,
+        "imported": imported,
+        "skipped": skipped,
+        "total_ditemukan": total,
+    }
 
 @knowledge_extra.post("/probe-folder")
 async def knowledge_probe_folder(

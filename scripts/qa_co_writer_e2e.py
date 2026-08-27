@@ -202,7 +202,7 @@ def main() -> int:
             else:
                 cek("generate bibliografi", False, f"{r.status_code} {r.text[:200]}")
 
-            # ============ 7. Sitasi tersimpan (Learning Space) ============
+            # ============ 7. Sitasi tersimpan ============
             r = c.get("/co_writer/learning-space")
             cek("learning-space terbaca", r.status_code == 200, f"{r.status_code} {r.text[:120]}")
 

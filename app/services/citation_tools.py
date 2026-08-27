@@ -13,8 +13,6 @@ pernah** berasal dari model. Agen mengirim metadata sumber yang sudah
 diverifikasi (hasil `search_web`/`arxiv_search`/`fetch_webpage`), server
 menyimpannya, lalu server-lah yang mengembalikan nomor urutnya. Model hanya
 menyalin nomor yang diberikan server.
-
-Lihat [[nalar-agentic-nulis-sebelum-rencana]] untuk pola penegakan tool serupa.
 """
 
 from __future__ import annotations
@@ -410,6 +408,145 @@ def _ekstrak_teks_berkas(jalur: str) -> str:
     return "\n\n".join(bagian)
 
 
+# Heading yang menandai awal blok Daftar Pustaka, dalam bentuk apa pun yang
+# ditulis agen/endpoint/impor: heading Markdown (`## DAFTAR PUSTAKA`), tebal
+# (`**Daftar Pustaka**`), atau baris polos. Case-insensitive, dan `DAFTAR ISI`
+# di depannya kadang memuat entri "Daftar Pustaka" juga — karena itu pemanggil
+# mengambil kecocokan TERAKHIR (blok pustaka sesungguhnya ada di akhir naskah).
+_JUDUL_PUSTAKA = re.compile(
+    r"(?im)^[ \t]*(?:#{1,6}[ \t]*)?(?:\*\*|__)?[ \t]*DAFTAR\s+PUSTAKA\b.*$"
+)
+
+
+def _pisah_daftar_pustaka(naskah: str) -> tuple[str, bool]:
+    """Pisahkan badan naskah dari blok Daftar Pustaka di ekornya.
+
+    Mengembalikan ``(badan, ada_blok)``. Dipakai agar penomoran ulang menghitung
+    urutan kemunculan dari BADAN saja — nomor `[n]` pada entri Daftar Pustaka
+    lama tidak boleh ikut menentukan urutan, dan blok itu dibuang supaya bisa
+    dibangun ulang bernomor rapat.
+    """
+    cocok = list(_JUDUL_PUSTAKA.finditer(naskah or ""))
+    if not cocok:
+        return (naskah or "").rstrip(), False
+    return (naskah or "")[: cocok[-1].start()].rstrip(), True
+
+
+def _peta_kemunculan(badan: str, maks: int) -> dict[int, int]:
+    """Petakan nomor sitasi lama → nomor rapat [1..N] menurut urutan kemunculan.
+
+    Gaya IEEE: sitasi dinomori sesuai urutan pertama kali muncul di teks. Hanya
+    nomor sah (`1..maks`, sesuai `referensi_urut`) yang dipetakan; nomor asing
+    (di luar jangkauan) dibiarkan agar tidak salah petakan. Hasilnya selalu
+    rapat 1..N tanpa lubang, meski himpunan nomor lama berlubang atau bergeser
+    (mis. `[13]..[34]` → `[1]..[22]`, atau `{3,7,13}` → `{1,2,3}`).
+    """
+    urut: list[int] = []
+    for m in re.finditer(r"\[(\d+)\]", badan or ""):
+        n = int(m.group(1))
+        if 1 <= n <= maks and n not in urut:
+            urut.append(n)
+    return {lama: baru + 1 for baru, lama in enumerate(urut)}
+
+
+def _tulis_ulang_nomor(teks: str, peta: dict[int, int]) -> str:
+    """Tulis ulang semua `[n]` sesuai `peta` dalam SATU lintasan.
+
+    Satu lintasan penting: penggantian berantai (mis. `[13]→[1]` lalu `[1]→[x]`)
+    akan saling menimpa bila dilakukan berurutan. `re.sub` dengan fungsi
+    mengganti tiap token berdasar nilai ASLI-nya, jadi aman dari tabrakan.
+    """
+    def ganti(m: re.Match) -> str:
+        n = int(m.group(1))
+        return f"[{peta[n]}]" if n in peta else m.group(0)
+
+    return re.sub(r"\[(\d+)\]", ganti, teks or "")
+
+
+async def compact_citations_and_bibliography(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    naskah: str,
+    *,
+    format_name: str = "ieee",
+) -> tuple[str, str, list[int], list[int], dict[int, int]]:
+    """Rapatkan sitasi `[n]` ke [1..N] (urut kemunculan) + Daftar Pustaka seiras.
+
+    Ini perbaikan alur inti: penomoran `[n]` dari `cite_add` bersifat global
+    per-pengguna (append-only lintas dokumen), sehingga laporan mandiri yang
+    perpustakaannya juga memuat referensi laporan lain bisa mulai dari tengah
+    (mis. `[13]`). Fungsi ini menghitung ulang penomoran KHUSUS dokumen ini
+    berdasar urutan kemunculan di teks, menulis ulang `[n]` di badan, DAN
+    membangun Daftar Pustaka bernomor sama — keduanya dijaga sinkron.
+
+    Mengembalikan ``(badan_baru, bibliografi_markdown, nomor_baru, asing, peta)``:
+    - ``badan_baru``  : naskah tanpa blok Daftar Pustaka lama, `[n]` sudah rapat.
+    - ``bibliografi_markdown`` : blok ``## DAFTAR PUSTAKA`` bernomor [1..N] urut
+      kemunculan (string kosong bila tak ada sitasi sah).
+    - ``nomor_baru`` : daftar nomor rapat yang terpakai (1..N).
+    - ``asing``      : nomor lama yang di luar jangkauan `referensi_urut`
+      (dibiarkan apa adanya di teks; ditandai untuk pemanggil).
+    - ``peta``       : pemetaan {nomor_lama: nomor_baru} — dipakai pemanggil
+      untuk memetakan ulang tabel DOI/tautan yang berkunci nomor global.
+    """
+    from app.services.citation_formatter import (
+        citation_meta_from_reference,
+        generate_citation,
+    )
+
+    daftar = await referensi_urut(db, user_id)
+    badan, _ = _pisah_daftar_pustaka(naskah or "")
+    peta = _peta_kemunculan(badan, len(daftar))
+
+    dipakai_lama = {int(m) for m in re.findall(r"\[(\d+)\]", badan)}
+    asing = sorted(n for n in dipakai_lama if not (1 <= n <= len(daftar)))
+
+    badan_baru = _tulis_ulang_nomor(badan, peta)
+    if not peta:
+        return badan_baru, "", [], asing, {}
+
+    baris = ["## DAFTAR PUSTAKA", ""]
+    for lama, baru in sorted(peta.items(), key=lambda kv: kv[1]):
+        ref = daftar[lama - 1]
+        try:
+            teks = generate_citation(citation_meta_from_reference(ref), format_name)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("format sitasi [%s]→[%s] gagal: %s", lama, baru, e)
+            teks = _bersih(ref.title)
+        baris.append(f"[{baru}] {teks}")
+        baris.append("")
+    bib_md = "\n".join(baris).rstrip() + "\n"
+    return badan_baru, bib_md, sorted(peta.values()), asing, peta
+
+
+async def naskah_ekspor_rapat(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    naskah: str,
+    *,
+    format_name: str = "ieee",
+) -> tuple[str, dict[int, int]]:
+    """Konten siap-ekspor dgn penomoran sitasi dirapatkan [1..N] (idempoten).
+
+    Dipakai jalur ekspor (PDF/DOCX) supaya keluaran SELALU bernomor [1..N]
+    urut kemunculan, tak peduli penomoran global `[n]` di penyimpanan — jadi
+    laporan yang perpustakaannya memuat referensi laporan lain tak lagi mulai
+    dari tengah (mis. `[13]`). Aman dipanggil berulang: pada naskah yang sudah
+    rapat, pemetaannya identitas.
+
+    Mengembalikan ``(naskah_baru, peta)`` dengan ``peta`` = {nomor_lama:
+    nomor_baru} untuk memetakan ulang tabel DOI/tautan yang semula berkunci
+    nomor global. Bila tak ada sitasi sah, kembalikan ``(naskah, {})`` TANPA
+    perubahan — supaya Daftar Pustaka manual tak bernomor tidak ikut terhapus.
+    """
+    badan_baru, bib_md, _used, _asing, peta = await compact_citations_and_bibliography(
+        db, user_id, naskah or "", format_name=format_name
+    )
+    if not peta:
+        return (naskah or ""), {}
+    return badan_baru.rstrip() + "\n\n" + bib_md, peta
+
+
 async def bibliografi_markdown(
     db: AsyncSession,
     user_id: uuid.UUID,
@@ -454,8 +591,10 @@ __all__ = [
     "NAMA_GRUP_AGEN",
     "SitasiError",
     "bibliografi_markdown",
+    "compact_citations_and_bibliography",
     "cite_add",
     "cite_list",
+    "naskah_ekspor_rapat",
     "ref_read",
     "referensi_urut",
 ]

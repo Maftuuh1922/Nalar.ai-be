@@ -121,7 +121,7 @@ class CoWriterStreamEditRequest(BaseModel):
     kb_name: str | None = Field(None, description="Nama knowledge base saat tool 'rag' aktif")
 
 
-# ── Agentic write & integrasi Learning Space ────────────────────────────────
+# ── Agentic write & integrasi Ruang Riset ────────────────────────────────
 
 
 class AgenticWriteRequest(BaseModel):
@@ -139,7 +139,7 @@ class AgenticWriteResponse(BaseModel):
 
 
 class LearningSpaceData(BaseModel):
-    """Data dari Learning Space yang bisa ditarik Co-Writer (tanpa upload ulang)."""
+    """Data dari Ruang Riset yang bisa ditarik Co-Writer (tanpa upload ulang)."""
     groups: list[dict]
     references: list[dict]
     saved_citations: list[dict]

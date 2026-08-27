@@ -27,6 +27,10 @@ python-docx>=1.1.0
 # Mesin cetak PDF laporan (Chromium headless). Setelah dipasang, browsernya
 # perlu diunduh sekali: `python -m playwright install chromium`.
 playwright>=1.61.0
+# Penyaji "typeset": markdown → HTML rapi ala LaTeX untuk pratinjau layar dan
+# jalur cetak PDF Chromium. `app/services/typeset.py` meng-import ini di level
+# modul, jadi tanpa paket ini /typeset, /compile, dan ekspor PDF sama-sama 500.
+markdown2>=2.4.0
 # Dipakai LlamaIndex `SimpleDirectoryReader` untuk mengekstrak teks dari .docx.
 docx2txt>=0.8
 # Uji: berkas di tests/ memakai pytest + penanda @pytest.mark.anyio untuk test async.
